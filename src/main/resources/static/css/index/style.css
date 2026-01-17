@@ -1,0 +1,125 @@
+body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+
+/* Карточки */
+.card { background-color: #1e1e1e; border: 1px solid #333; border-radius: 12px; margin-bottom: 1rem; color: #ffffff; }
+
+/* Цвета прибыли */
+.profit-pos { color: #00ff88 !important; }
+.profit-neg { color: #ff4d4d !important; }
+.profit-pos, .profit-pos small { color: #00ff88 !important; }
+.profit-neg, .profit-neg small { color: #ff4d4d !important; }
+
+/* Статистика */
+.stat-label { font-size: 0.8rem; color: #aaaaaa; text-transform: uppercase; letter-spacing: 1px; }
+.balance-val { font-size: calc(1.5rem + 1vw); font-weight: bold; line-height: 1.2; color: #ffffff; }
+
+/* ТАБЛИЦА */
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    background-color: #1e1e1e;
+    border-radius: 8px;
+    border: 1px solid #333;
+}
+
+.table {
+    width: 100% !important;
+    margin-bottom: 0;
+    color: #ffffff;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.table thead th {
+    background-color: #252525 !important;
+    color: #e0e0e0 !important;
+    border-bottom: 2px solid #444;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    padding: 12px 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.table td {
+    background-color: #1e1e1e !important;
+    color: #ffffff !important;
+    border-bottom: 1px solid #333;
+    vertical-align: middle;
+    padding: 12px 10px;
+}
+
+/* Текст "Сделок не найдено" и пустые состояния */
+.text-muted {
+    color: #bdbdbd !important;
+}
+
+/* Дата */
+td[style*="color: #aaaaaa"] {
+    color: #cccccc !important;
+}
+
+.sortable {
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.sortable:hover {
+    color: #00ff88 !important;
+}
+
+/* Возвращаем меню стандартное поведение "всплывашки" */
+.dropdown-menu {
+    position: absolute !important;
+    z-index: 1060 !important;
+    margin: 0;
+}
+
+/* Для мобильных: чтобы таблица не схлопывалась слишком сильно */
+@media (max-width: 768px) {
+    .table {
+        min-width: 900px;
+    }
+}
+
+@media (max-width: 576px) {
+    /* Уменьшаем padding у контейнера, чтобы освободить место */
+    .card.p-0.p-md-4.mb-4 .p-3 {
+        padding: 10px !important;
+    }
+
+    /* Делаем шрифт селектора чуть меньше для мобильных */
+    #view-selector {
+        padding-left: 8px;
+        padding-right: 25px;
+    }
+}
+
+.table-hover tbody tr:hover td { background-color: #383838 !important; }
+
+.sortable {
+    position: relative;
+    cursor: pointer;
+}
+
+.filter-dot {
+    display: none;
+    width: 7px;
+    height: 7px;
+    background-color: #00ff88;
+    border-radius: 50%;
+    position: relative;
+    top: -8px;
+    margin-left: 2px;
+
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.8);
+    vertical-align: middle;
+}
+
+.dropdown-toggle::after {
+    margin-left: 0.255em;
+    vertical-align: 0.255em;
+}
+
+#view-selector { background-color: #2d2d2d; border: 1px solid #444; color: white; border-radius: 8px; }

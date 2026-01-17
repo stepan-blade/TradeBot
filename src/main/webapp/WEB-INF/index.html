@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Binance Demo Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <style>
+    body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+
+    /* Карточки */
+    .card { background-color: #1e1e1e; border: 1px solid #333; border-radius: 12px; margin-bottom: 1rem; color: #ffffff; }
+
+    /* Цвета прибыли */
+    .profit-pos { color: #00ff88 !important; }
+    .profit-neg { color: #ff4d4d !important; }
+    .profit-pos, .profit-pos small { color: #00ff88 !important; }
+    .profit-neg, .profit-neg small { color: #ff4d4d !important; }
+
+    /* Статистика */
+    .stat-label { font-size: 0.8rem; color: #aaaaaa; text-transform: uppercase; letter-spacing: 1px; }
+    .balance-val { font-size: calc(1.5rem + 1vw); font-weight: bold; line-height: 1.2; color: #ffffff; }
+
+    /* ТАБЛИЦА: */
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+      background-color: #1e1e1e;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+
+    .table {
+      width: 100% !important;
+      margin-bottom: 0;
+      color: #ffffff;
+      border-collapse: collapse;
+      table-layout: auto;
+    }
+
+    .table thead th {
+      background-color: #252525 !important;
+      color: #e0e0e0 !important;
+      border-bottom: 2px solid #444;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      padding: 12px 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .table td {
+      background-color: #1e1e1e !important;
+      color: #ffffff !important;
+      border-bottom: 1px solid #333;
+      vertical-align: middle;
+      padding: 12px 10px;
+    }
+
+    /* Текст "Сделок не найдено" и пустые состояния */
+    .text-muted {
+      color: #bdbdbd !important;
+    }
+
+    /* Дата */
+    td[style*="color: #aaaaaa"] {
+      color: #cccccc !important;
+    }
+
+    .sortable {
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .sortable:hover {
+      color: #00ff88 !important;
+    }
+
+    /* Возвращаем меню стандартное поведение "всплывашки" */
+    .dropdown-menu {
+      position: absolute !important;
+      z-index: 1060 !important;
+      margin: 0;
+    }
+
+    /* Для мобильных: чтобы таблица не схлопывалась слишком сильно */
+    @media (max-width: 768px) {
+      .table {
+        min-width: 900px;
+      }
+    }
+
+    @media (max-width: 576px) {
+      /* Уменьшаем padding у контейнера, чтобы освободить место */
+      .card.p-0.p-md-4.mb-4 .p-3 {
+        padding: 10px !important;
+      }
+
+      /* Делаем шрифт селектора чуть меньше для мобильных */
+      #view-selector {
+        padding-left: 8px;
+        padding-right: 25px;
+      }
+    }
+
+    .table-hover tbody tr:hover td { background-color: #383838 !important; }
+
+    /*/------_-----NAVBAR--------------/*/
+    /* Стили для кастомной иконки меню (три полоски) */
+    .menu-icon {
+      width: 24px;
+      height: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    .menu-icon span {
+      display: block;
+      height: 2px;
+      width: 100%;
+      background-color: #ffffff;
+      border-radius: 2px;
+      transition: 0.3s;
+    }
+
+    /* Делаем среднюю полоску чуть короче для стиля */
+    .menu-icon span:nth-child(2) {
+      width: 75%;
+      align-self: flex-end;
+    }
+
+    .menu-icon:hover span:nth-child(2) {
+      width: 100%;
+    }
+
+    /* Текст заголовка */
+    .uppercase-tracking {
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 1.1rem;
+    }
+
+    /* Настройка Navbar */
+    .navbar {
+      background-color: #1a1a1a !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    /* Фикс контейнера, так как мы вынесли навбар из него */
+    .container.py-3.py-md-5 {
+      padding-top: 1rem !important;
+    }
+
+    /* Эффект стекла для меню */
+    .glass-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(18, 18, 18, 0.6); /* Темный полупрозрачный фон */
+      backdrop-filter: blur(15px); /* То самое размытие */
+      -webkit-backdrop-filter: blur(15px);
+      z-index: 1050;
+      display: none; /* Скрыто по умолчанию */
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .glass-menu.active {
+      display: flex;
+      opacity: 1;
+    }
+
+    .glass-content {
+      width: 85%;
+      max-width: 400px;
+      padding: 2rem;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+    }
+
+    .glass-item {
+      display: flex;
+      align-items: center;
+      padding: 15px 20px;
+      margin-bottom: 10px;
+      color: white;
+      text-decoration: none;
+      font-size: 1.1rem;
+      border-radius: 12px;
+      transition: all 0.2s ease;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .glass-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #00ff88;
+      transform: translateX(5px);
+    }
+
+    /* Анимация иконки меню (крестик) */
+    .menu-icon.open span:nth-child(1) {
+      transform: translateY(8px) rotate(45deg);
+    }
+    .menu-icon.open span:nth-child(2) {
+      opacity: 0;
+    }
+    .menu-icon.open span:nth-child(3) {
+      transform: translateY(-8px) rotate(-45deg);
+    }
+    /*/-----------------------------------/*/
+
+    .sortable {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .filter-dot {
+      display: none;
+      width: 7px;
+      height: 7px;
+      background-color: #00ff88;
+      border-radius: 50%;
+      position: absolute;
+      top: -2px;
+      right: -10px;
+      box-shadow: 0 0 6px rgba(0, 255, 136, 0.8);
+    }
+
+    #view-selector { background-color: #2d2d2d; border: 1px solid #444; color: white; border-radius: 8px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+</head>
+<body>
+
+<div class="container py-3 py-md-5">
+  <nav class="navbar navbar-dark bg-dark border-bottom border-secondary border-opacity-25 mb-4 py-3">
+    <div class="container">
+      <div class="d-flex align-items-center">
+        <div class="bg-primary bg-gradient rounded-3 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+          <i class="bi bi-cpu-fill text-white fs-5"></i>
+        </div>
+        <div>
+          <h1 class="h5 mb-0 fw-bold text-white uppercase-tracking">Главная</h1>
+          <span class="text-info small d-block" style="font-size: 0.7rem; letter-spacing: 1px;">SYSTEM ACTIVE</span>
+        </div>
+      </div>
+
+      <button class="btn btn-link text-white p-0 shadow-none" type="button" onclick="toggleMenu()" style="text-decoration: none; z-index: 1100;">
+        <div class="menu-icon" id="menuIcon">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </button>
+    </div>
+  </nav>
+
+  <div class="glass-menu" id="glassMenu">
+    <div class="glass-content">
+      <div class="menu-items">
+        <div class="text-muted small text-uppercase mb-4 mt-5" style="letter-spacing: 3px;">Навигация</div>
+        <a href="/settings" class="glass-item"><i class="bi bi-sliders me-3"></i>Настройки бота</a>
+        <a href="/h2-console" target="_blank" class="glass-item"><i class="bi bi-database me-3"></i>База данных</a>
+        <div class="border-bottom border-white border-opacity-10 my-4"></div>
+        <form action="/logout" method="post">
+          <button type="submit" class="glass-item text-danger border-0 bg-transparent w-100 text-start">
+            <i class="bi bi-box-arrow-right me-3"></i>Выйти из системы
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6">
+      <div class="card p-3 p-md-4 h-100 d-flex flex-column">
+        <div class="stat-label mb-1">Баланс</div>
+        <div id="balance" class="balance-val text-truncate mb-1">0.00 $</div>
+        <div id="percent-change" class="fw-bold fs-6 mb-3">+0.00%</div>
+
+        <div id="total-pnl-container" class="mt-auto pt-3 border-top border-secondary border-opacity-25" style="display: none;">
+          <div class="stat-label mb-1">PnL активных сделок:</div>
+          <div id="total-pnl-val" class="fw-bold fs-6 lh-1">0.00 $ (0.00%)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6">
+      <div class="card p-3 p-md-4 h-100 d-flex flex-column shadow-sm">
+        <div class="mb-2">
+          <div class="stat-label mb-1">Статус бота</div>
+          <div class="d-flex align-items-center bg-dark px-2 py-1 rounded-pill w-fit-content" style="--bs-bg-opacity: .5; width: fit-content;">
+            <div class="spinner-grow text-success spinner-grow-sm me-2" style="width: 8px; height: 8px;"></div>
+            <span class="text-success fw-bold small">Online</span>
+          </div>
+        </div>
+
+        <div id="today-stats-container" class="mt-auto pt-3 border-top border-secondary border-opacity-25">
+          <div class="stat-label mb-1">PNL сегодня:</div>
+          <div id="today-profit" class="fw-bold fs-6 lh-1 text-white">0.00 $ (0.00%)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-2 p-md-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center p-2 mb-0">
+      <h5 class="mb-0">График доходности</h5>
+      <button class="btn btn-outline-secondary btn-sm" onclick="resetZoom()">
+        <i class="bi bi-arrows-angle-contract"></i> Сброс зума
+      </button>
+    </div>
+    <div style="height: 250px; position: relative;">
+      <canvas id="balanceChart"></canvas>
+    </div>
+  </div>
+
+  <div id="cooldown-section" class="mb-3">
+    <div id="cooldown-container" class="d-flex flex-wrap"></div>
+  </div>
+
+  <div class="card mb-4 overflow-hidden">
+    <div class="p-3 border-bottom border-secondary border-opacity-25">
+      <div class="d-flex align-items-center justify-content-between gap-2">
+        <div style="flex: 1; max-width: 180px;">
+          <select id="view-selector" class="form-select form-select-sm" onchange="changeView()" style="height: 38px; font-size: 0.85rem; background-color: #2d2d2d; border-color: #444; color: white;">
+            <option value="OPEN" selected>🚀 Сделки</option>
+            <option value="CLOSED">📜 История</option>
+          </select>
+        </div>
+        <div class="text-end" style="white-space: nowrap;">
+          <div class="stat-label" style="font-size: 0.65rem; opacity: 0.7;">В обороте</div>
+          <div id="in-trade" class="fw-bold text-info" style="font-size: 1.1rem; line-height: 1;">0.00 $</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+        <tr>
+          <th style="width: 12%">
+            <div class="dropdown" id="dateDropdown">
+              <span class="dropdown-toggle sortable" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                Дата <span id="dot-date" class="filter-dot"></span>
+              </span>
+              <div class="dropdown-menu dropdown-menu-dark p-3" style="min-width: 250px;" onclick="event.stopPropagation()">
+                <div class="mb-2">
+                  <label class="small text-muted mb-1 d-block">От:</label>
+                  <input type="date" id="filter-date-start" class="form-control form-control-sm bg-dark text-white border-secondary">
+                </div>
+                <div class="mb-3">
+                  <label class="small text-muted mb-1 d-block">До:</label>
+                  <input type="date" id="filter-date-end" class="form-control form-control-sm bg-dark text-white border-secondary">
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-primary btn-sm flex-grow-1" onclick="applyDateFilter()">Применить</button>
+                  <button class="btn btn-outline-light btn-sm" onclick="resetFilter('date')" title="Сбросить">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </th>
+
+          <th style="width: 10%">Время</th>
+
+          <th style="width: 15%">
+            <div class="dropdown">
+              <span class="dropdown-toggle sortable" data-bs-toggle="dropdown">
+                Актив <span id="dot-asset" class="filter-dot"></span>
+              </span>
+              <ul class="dropdown-menu dropdown-menu-dark" id="filter-asset-list" style="max-height: 300px; overflow-y: auto;"></ul>
+            </div>
+          </th>
+
+          <th style="width: 10%">Объем</th>
+
+          <th style="width: 10%">
+            <div class="dropdown">
+              <span class="dropdown-toggle sortable" data-bs-toggle="dropdown">
+                Тип <span id="dot-type" class="filter-dot"></span>
+              </span>
+              <ul class="dropdown-menu dropdown-menu-dark">
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('type', 'ALL')">Все</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('type', 'LONG')">LONG</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('type', 'SHORT')">SHORT</a></li>
+              </ul>
+            </div>
+          </th>
+
+          <th style="width: 10%">Вход</th>
+          <th style="width: 10%" id="col-exit-header">Выход</th>
+
+          <th style="width: 13%" id="col-result-cell">
+            <div class="dropdown">
+              <span class="dropdown-toggle sortable" data-bs-toggle="dropdown">
+                Результат <span id="dot-result" class="filter-dot"></span>
+              </span>
+              <ul class="dropdown-menu dropdown-menu-dark">
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'ALL')">Все</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'WIN')">Прибыльные</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'LOSS')">Убыточные</a></li>
+              </ul>
+            </div>
+          </th>
+
+          <th style="width: 10%" id="col-action-header">Действие</th>
+        </tr>
+        </thead>
+        <tbody id="trade-history">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-center p-3" id="pagination-controls"></div>
+  </div>
+</div>
+
+<script>
+  let currentPage = 1;
+  const recordsPerPage = 10;
+  let fullHistory = [];
+  let balanceChart;
+  let currentView = 'OPEN';
+
+  let sortDirection = {
+    date: true,
+    asset: true,
+    type: true,
+    profit: true
+  };
+
+  // Состояние фильтров
+  let filters = {
+    asset: 'ALL',
+    type: 'ALL',
+    result: 'ALL'
+  };
+
+  // Функция для кнопки "Применить" в календаре
+  function applyDateFilter() {
+    renderTable(); // Запускаем фильтрацию
+
+    // Закрываем выпадающее меню даты
+    const dateDropdownEl = document.querySelector('#dateDropdown [data-bs-toggle="dropdown"]');
+    const instance = bootstrap.Dropdown.getInstance(dateDropdownEl);
+    if (instance) instance.hide();
+  }
+
+  function setFilter(key, value) {
+    filters[key] = value;
+    currentPage = 1;
+    renderTable();
+  }
+
+  function resetFilter(type) {
+    if (type === 'date') {
+      document.getElementById('filter-date-start').value = '';
+      document.getElementById('filter-date-end').value = '';
+      // Сбрасываем текущую страницу на первую
+      currentPage = 1;
+      renderTable();
+    }
+  }
+
+  // Функция для динамического заполнения списка валютных пар
+  function updateAssetFilterList() {
+    const assetList = document.getElementById('filter-asset-list');
+    if (!assetList) return;
+
+    const uniqueAssets = [...new Set(fullHistory.map(t => t.asset))];
+    let html = `<li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('asset', 'ALL')">Все пары</a></li>`;
+    uniqueAssets.forEach(asset => {
+      html += `<li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('asset', '${asset}')">${asset}</a></li>`;
+    });
+    assetList.innerHTML = html;
+  }
+
+  function changeView() {
+    currentView = document.getElementById('view-selector').value;
+
+    // Сбрасываем фильтры при переключении вкладок
+    filters.asset = 'ALL';
+    filters.type = 'ALL';
+    filters.result = 'ALL';
+
+    // Сбрасываем даты (опционально, если хотите полной очистки)
+    document.getElementById('filter-date-start').value = '';
+    document.getElementById('filter-date-end').value = '';
+
+    currentPage = 1;
+    renderTable();
+  }
+
+  async function updateDashboard() {
+    updateCooldowns();
+    try {
+      const response = await fetch('/api/status?nocache=' + Date.now());
+      const data = await response.json();
+
+      // 1. История сделок
+      fullHistory = data.history || [];
+
+      // 2. Текущий баланс (берем из поля balance, которое прислал сервер)
+      const currentBalance = data.balance || 1000.0;
+      const initialDeposit = 1000.0;
+
+      // 3. РАСЧЕТ И ВЫВОД ПРОФИТА ЗА СЕГОДНЯ
+      const todayPrefix = new Date().toLocaleDateString('ru-RU');
+      const todayProfit = fullHistory
+              .filter(t => t.status === 'CLOSED' && t.exitTime && t.exitTime.startsWith(todayPrefix))
+              .reduce((sum, t) => sum + (t.profit || 0), 0);
+
+      const todayProfitEl = document.getElementById('today-profit');
+
+      // Безопасный расчет процента за сегодня
+      const startBalanceToday = currentBalance - todayProfit;
+      const todayPercent = startBalanceToday > 0 ? (todayProfit / startBalanceToday) * 100 : 0;
+
+      if (todayProfit > 0) {
+        todayProfitEl.innerText = `+${todayProfit.toFixed(2)} $ (+${todayPercent.toFixed(2)}%)`;
+        todayProfitEl.className = "profit-pos fw-bold fs-6 lh-1";
+      } else if (todayProfit < 0) {
+        todayProfitEl.innerText = `${todayProfit.toFixed(2)} $ (${todayPercent.toFixed(2)}%)`;
+        todayProfitEl.className = "profit-neg fw-bold fs-6 lh-1";
+      } else {
+        todayProfitEl.innerText = `0.00 $ (0.00%)`;
+        todayProfitEl.className = "text-white fw-bold fs-6 lh-1";
+      }
+
+      // 4. РАСЧЕТ ОБЩЕГО ПЛАВАЮЩЕГО PNL И ОБОРОТА
+      const openTrades = fullHistory.filter(t => t.status === 'OPEN');
+      let totalUnrealizedPnL = 0;
+      const totalInTrade = openTrades.reduce((sum, t) => sum + (t.volume || 0), 0);
+
+      const inTradeEl = document.getElementById('in-trade');
+      if (inTradeEl) {
+        inTradeEl.innerText = totalInTrade.toFixed(2) + " $";
+      }
+
+      openTrades.forEach(trade => {
+        const currentPrice = trade.exitPrice || trade.entryPrice || 0;
+        const entryPrice = trade.entryPrice || 0;
+        if (entryPrice > 0) {
+          let pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+          if (trade.type === 'SHORT') pnlPercent *= -1;
+          totalUnrealizedPnL += trade.volume * ((pnlPercent - 0.2) / 100);
+        }
+      });
+
+      const pnlContainer = document.getElementById('total-pnl-container');
+      const pnlValEl = document.getElementById('total-pnl-val');
+
+      if (openTrades.length > 0) {
+        pnlContainer.style.display = 'block';
+        const unrealizedPercent = (totalUnrealizedPnL / currentBalance) * 100;
+        const sign = totalUnrealizedPnL >= 0 ? "+" : "";
+        pnlValEl.innerText = `${sign}${totalUnrealizedPnL.toFixed(2)} $ (${sign}${unrealizedPercent.toFixed(2)}%)`;
+        pnlValEl.className = totalUnrealizedPnL >= 0 ? "profit-pos fw-bold fs-6 lh-1" : "profit-neg fw-bold fs-6 lh-1";
+      } else {
+        pnlContainer.style.display = 'none';
+      }
+
+      // 5. ОБЩИЙ ПРИРОСТ БАЛАНСА
+      const diffUsdt = currentBalance - initialDeposit;
+      const calculatedPercent = (diffUsdt / initialDeposit) * 100;
+
+      document.getElementById('balance').innerText = currentBalance.toFixed(2) + " $";
+
+      const percentEl = document.getElementById('percent-change');
+      percentEl.innerText = (calculatedPercent >= 0 ? "+" : "") + calculatedPercent.toFixed(2) + "%";
+      percentEl.className = calculatedPercent >= 0 ? "profit-pos fw-bold" : "profit-neg fw-bold";
+
+      // 6. ОБНОВЛЕНИЕ ГРАФИКА
+      if (data.balanceHistory && Array.isArray(data.balanceHistory)) {
+        updateChart(data.balanceHistory);
+      }
+
+      renderTable();
+    } catch (error) {
+      console.error("Ошибка обновления дашборда:", error);
+    }
+  }
+
+  function renderTable() {
+    updateAssetFilterList();
+
+    const historyBody = document.getElementById('trade-history');
+    if (!historyBody) return;
+
+    // ОБНОВЛЕНИЕ ИНДИКАТОРОВ (ТОЧЕК)
+    const start = document.getElementById('filter-date-start').value;
+    const end = document.getElementById('filter-date-end').value;
+
+    // Дата
+    document.getElementById('dot-date').style.display = (start || end) ? 'inline-block' : 'none';
+    // Актив
+    document.getElementById('dot-asset').style.display = (filters.asset !== 'ALL') ? 'inline-block' : 'none';
+    // Тип
+    document.getElementById('dot-type').style.display = (filters.type !== 'ALL') ? 'inline-block' : 'none';
+    // Результат (только если элемент существует в DOM)
+    const dotRes = document.getElementById('dot-result');
+    if (dotRes) dotRes.style.display = (filters.result !== 'ALL') ? 'inline-block' : 'none';
+
+    // 1. Получаем базу данных по статусу
+    let data = fullHistory.filter(trade => trade.status === currentView);
+
+    // 2. СОРТИРОВКА
+    data.sort((a, b) => {
+      try {
+        // Выбираем время в зависимости от того, закрыта сделка или открыта
+        const timeA_raw = (currentView === 'CLOSED' && a.exitTime) ? a.exitTime : a.time;
+        const timeB_raw = (currentView === 'CLOSED' && b.exitTime) ? b.exitTime : b.time;
+
+        if (!timeA_raw || !timeB_raw) return 0;
+
+        // Превращаем "16.01.2026 | 10:00" в объект Date для надежного сравнения
+        const parseDate = (str) => {
+          const [datePart, timePart] = str.split(' | ');
+          const [d, m, y] = datePart.split('.');
+          const [hh, mm] = timePart ? timePart.split(':') : ['00', '00'];
+          return new Date(y, m - 1, d, hh, mm).getTime();
+        };
+
+        return parseDate(timeB_raw) - parseDate(timeA_raw);
+      } catch (e) {
+        console.error("Ошибка сортировки:", e);
+        return 0;
+      }
+    });
+
+    // 3. Применяем фильтры
+    if (filters.asset !== 'ALL') data = data.filter(t => t.asset === filters.asset);
+    if (filters.type !== 'ALL') data = data.filter(t => t.type === filters.type);
+    if (filters.result !== 'ALL') {
+      if (filters.result === 'WIN') data = data.filter(t => t.profit > 0);
+      if (filters.result === 'LOSS') data = data.filter(t => t.profit < 0);
+    }
+
+    // 4. Фильтр дат
+    const startDateInput = document.getElementById('filter-date-start').value;
+    const endDateInput = document.getElementById('filter-date-end').value;
+
+    if (startDateInput || endDateInput) {
+      data = data.filter(t => {
+        // ВАЖНО: берем поле entryTime, так как именно оно содержит дату в истории
+        const timeStr = (currentView === 'CLOSED' && t.exitTime) ? t.exitTime : (t.entryTime || t.time);
+
+        if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes('.')) return false;
+
+        try {
+          // Извлекаем только дату "16.01.2026" из строки "16.01.2026 | 10:00"
+          const datePart = timeStr.split(' | ')[0];
+          const parts = datePart.split('.');
+
+          // Создаем объект даты (год, месяц-1, день)
+          const tradeDate = new Date(parts[2], parts[1] - 1, parts[0]);
+          tradeDate.setHours(0, 0, 0, 0);
+
+          // Обработка даты "ОТ"
+          if (startDateInput) {
+            const start = new Date(startDateInput);
+            start.setHours(0, 0, 0, 0);
+            if (tradeDate < start) return false;
+          }
+
+          // Обработка даты "ДО"
+          if (endDateInput) {
+            const end = new Date(endDateInput);
+            end.setHours(0, 0, 0, 0);
+            if (tradeDate > end) return false;
+          }
+
+          return true;
+        } catch (e) {
+          console.error("Ошибка парсинга даты для фильтра:", e);
+          return false;
+        }
+      });
+    }
+
+    // 5. Очистка и настройка заголовков
+    historyBody.innerHTML = '';
+    const actionHeader = document.getElementById('col-action-header');
+    if (actionHeader) {
+      // Эта колонка всегда должна быть видна
+      actionHeader.style.display = 'table-cell';
+      actionHeader.innerHTML = 'Действие';
+    }
+
+    const resultCell = document.getElementById('col-result-cell');
+
+    if (currentView === 'OPEN') {
+      // ДЛЯ АКТИВНЫХ СДЕЛОК: Просто текст без возможности клика/сортировки
+      const resultCell = document.getElementById('col-result-cell');
+      if (resultCell) {
+        // Проверяем, активен ли фильтр (WIN или LOSS)
+        const dotVisible = filters.result !== 'ALL' ? 'inline-block' : 'none';
+
+        if (currentView === 'OPEN') {
+          // В режиме активных сделок просто текст + точка
+          resultCell.innerHTML = `Текущий PnL <span id="dot-result" class="filter-dot" style="display: ${dotVisible}"></span>`;
+        } else {
+          // В режиме истории — дропдаун + точка внутри
+          resultCell.innerHTML = `
+            <div class="dropdown">
+              <span class="dropdown-toggle sortable" data-bs-toggle="dropdown">
+                Результат <span id="dot-result" class="filter-dot" style="display: ${dotVisible}"></span>
+              </span>
+              <ul class="dropdown-menu dropdown-menu-dark">
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'ALL')">Все</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'WIN')">Прибыльные</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'LOSS')">Убыточные</a></li>
+              </ul>
+            </div>`;
+        }
+      }
+    } else {
+      // ДЛЯ ИСТОРИИ: Возвращаем выпадающий список с фильтрами
+      if (resultCell) {
+        resultCell.innerHTML = `
+            <div class="dropdown">
+              <span class="dropdown-toggle sortable" data-bs-toggle="dropdown">Результат</span>
+              <ul class="dropdown-menu dropdown-menu-dark">
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'ALL')">Все</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'WIN')">Прибыльные</a></li>
+                <li><a class="dropdown-item" href="javascript:void(0)" onclick="setFilter('result', 'LOSS')">Убыточные</a></li>
+              </ul>
+            </div>`;
+      }
+      document.getElementById('col-exit-header').innerText = 'Выход';
+      if (actionHeader) actionHeader.style.display = 'none';
+    }
+
+    if (data.length === 0) {
+      // Используем colspan="12", чтобы перекрыть любое количество колонок с запасом
+      historyBody.innerHTML = `
+        <tr>
+            <td colspan="12" class="text-center py-5 text-muted" style="background-color: #1e1e1e !important;">
+                <i class="bi bi-search d-block mb-2" style="font-size: 2rem; opacity: 0.3;"></i>
+                Сделок не найдено
+            </td>
+        </tr>`;
+      renderPagination(0);
+      return;
+    }
+
+    // 6. Пагинация
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    const paginatedItems = data.slice(startIndex, startIndex + recordsPerPage);
+
+    // 7. Генерация строк
+    paginatedItems.forEach(trade => {
+      if (!trade) return;
+
+      const row = document.createElement('tr');
+      const timeFull = trade.entryTime || "— | —";
+      const timeParts = timeFull.split(" | ");
+      const entryDate = timeParts[0] || "—";
+      const entryTime = timeParts[1] || "—";
+
+      let timeDisplay = "";
+      if (currentView === 'OPEN') {
+        timeDisplay = entryTime;
+      } else {
+        let exitTimeOnly = "—";
+        if (trade.exitTime && trade.exitTime.includes(" | ")) {
+          exitTimeOnly = trade.exitTime.split(" | ")[1];
+        }
+        timeDisplay = `<div class="d-flex align-items-center gap-1">
+            <small class="text-muted">${entryTime}</small>
+            <i class="bi bi-arrow-right text-secondary" style="font-size: 0.7rem;"></i>
+            <span>${exitTimeOnly}</span>
+        </div>`;
+      }
+
+      // РАСЧЕТ ЦЕНЫ И ПРОФИТА
+      const entryPrice = parseFloat(trade.entryPrice) || 0;
+      const displayPrice = parseFloat(trade.exitPrice) || entryPrice;
+      const tradeVolume = parseFloat(trade.volume) || 0;
+
+      // Проверка: если цены идентичны и это OPEN сделка,
+// возможно, данные с бэкенда приходят "плоские"
+      if (currentView === 'OPEN' && displayPrice === entryPrice) {
+        console.warn(`Предупреждение: Цена для ${trade.asset} не изменилась с момента входа.`);
+      }
+
+      // Считаем проценты
+      const rawProfitPercent = entryPrice !== 0 ? ((displayPrice - entryPrice) / entryPrice) * 100 : 0;
+      let finalPercent = trade.type === 'SHORT' ? -rawProfitPercent : rawProfitPercent;
+
+      let profitText, profitClass = "";
+
+      if (currentView === 'OPEN') {
+        // Промежуточный результат в долларах для активных сделок
+        const currentProfitUsdt = tradeVolume * (finalPercent / 100);
+        const signUsdt = currentProfitUsdt >= 0 ? "+" : "";
+
+        profitText = `${signUsdt}${currentProfitUsdt.toFixed(2)} $`;
+        profitClass = finalPercent > 0 ? "profit-pos" : (finalPercent < 0 ? "profit-neg" : "text-white");
+      } else {
+        // Финальный результат из истории
+        const profit = trade.profit || 0;
+        finalPercent = (tradeVolume > 0) ? (profit / tradeVolume) * 100 : 0;
+        profitText = (profit >= 0 ? "+" : "") + profit.toFixed(2) + " $";
+        //profitText = `${signUsdt}${currentProfitUsdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} $`;
+        profitClass = profit > 0 ? "profit-pos" : (profit < 0 ? "profit-neg" : "text-white");
+      }
+
+      const signPercent = finalPercent > 0 ? "+" : "";
+      const actionCell = currentView === 'OPEN' ? `<td><button class="btn btn-outline-danger btn-sm w-100" onclick="manualClose('${trade.asset}')">Завершить</button></td>` : '';
+
+      // ЗАПОЛНЕНИЕ СТРОКИ (Добавлена колонка tradeVolume)
+      row.innerHTML = `
+        <td class="small text-muted">${entryDate}</td>
+        <td style="white-space: nowrap;">${timeDisplay}</td>
+        <td><span class="badge bg-secondary">${trade.asset || '—'}</span></td>
+        <td class="fw-bold text-info">${tradeVolume.toFixed(2)} $</td>
+        <td><span class="badge ${trade.type === 'LONG' ? 'bg-success' : 'bg-danger'}">${trade.type || '—'}</span></td>
+        <td style="white-space: nowrap;">${entryPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</td>
+  <td style="white-space: nowrap;">${displayPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</td>
+        <td class="${profitClass} fw-bold">
+            ${profitText}<br>
+            <small style="color: inherit;">(${signPercent}${finalPercent.toFixed(2)}%)</small>
+        </td>
+        ${actionCell}
+      `;
+      historyBody.appendChild(row);
+    });
+
+    renderPagination(data.length);
+  }
+
+  // Ручное заверпшение сделки
+  async function manualClose(symbol) {
+    try {
+      const response = await fetch(`/api/preview-close?symbol=${symbol}`);
+      if (!response.ok) throw new Error("Trade not found");
+
+      const data = await response.json();
+
+      const profitText = data.profitUsdt >= 0 ? `+${data.profitUsdt}` : `${data.profitUsdt}`;
+      const emoji = data.profitUsdt >= 0 ? "✅" : "⚠️";
+
+      const confirmMsg = `Закрыть позицию ${symbol}?\n\n` +
+              `Текущая цена: ${data.currentPrice}\n` +
+              `Ожидаемый профит: ${profitText} $ (${data.percent}%)\n` +
+              `*с учетом комиссии 0.2% ${emoji}`;
+
+      if (confirm(confirmMsg)) {
+        const closeRes = await fetch(`/api/close-trade?symbol=${symbol}`, { method: 'POST' });
+        if (closeRes.ok) {
+          updateDashboard();
+        } else {
+          alert("Ошибка при закрытии сделки");
+        }
+      }
+    } catch (error) {
+      console.error("Ошибка превью:", error);
+      // Если что-то пошло не так с превью, просто спрашиваем обычное подтверждение
+      if (confirm(`Вы уверены, что хотите закрыть ${symbol} вручную?`)) {
+        const res = await fetch(`/api/close-trade?symbol=${symbol}`, { method: 'POST' });
+        if (res.ok) updateDashboard();
+      }
+    }
+  }
+
+  function renderPagination(totalLength) {
+    const controls = document.getElementById('pagination-controls');
+    controls.innerHTML = '';
+    const totalPages = Math.ceil(totalLength / recordsPerPage);
+    if (totalPages <= 1) return;
+
+    const navGroup = document.createElement('div');
+    navGroup.className = 'btn-group';
+
+    // Кнопка "В самый запуск"
+    const firstBtn = document.createElement('button');
+    firstBtn.className = `btn btn-sm btn-outline-secondary ${currentPage === 1 ? 'disabled' : ''}`;
+    firstBtn.innerHTML = '<i class="bi bi-chevron-double-left"></i>';
+    firstBtn.onclick = () => { currentPage = 1; renderTable(); };
+    navGroup.appendChild(firstBtn);
+
+    // Кнопка "Назад"
+    const prevBtn = document.createElement('button');
+    prevBtn.className = `btn btn-sm btn-outline-secondary ${currentPage === 1 ? 'disabled' : ''}`;
+    prevBtn.innerHTML = '<i class="bi bi-chevron-left"></i>';
+    prevBtn.onclick = () => { if(currentPage > 1) { currentPage--; renderTable(); } };
+    navGroup.appendChild(prevBtn);
+
+    // Номера страниц (показываем текущую и соседние)
+    for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+      const btn = document.createElement('button');
+      btn.innerText = i;
+      btn.className = `btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-outline-secondary'}`;
+      btn.onclick = () => { currentPage = i; renderTable(); };
+      navGroup.appendChild(btn);
+    }
+
+    // Кнопка "Вперед"
+    const nextBtn = document.createElement('button');
+    nextBtn.className = `btn btn-sm btn-outline-secondary ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextBtn.innerHTML = '<i class="bi bi-chevron-right"></i>';
+    nextBtn.onclick = () => { if(currentPage < totalPages) { currentPage++; renderTable(); } };
+    navGroup.appendChild(nextBtn);
+
+    // Кнопка "В самый конец"
+    const lastBtn = document.createElement('button');
+    lastBtn.className = `btn btn-sm btn-outline-secondary ${currentPage === totalPages ? 'disabled' : ''}`;
+    lastBtn.innerHTML = '<i class="bi bi-chevron-double-right"></i>';
+    lastBtn.onclick = () => { currentPage = totalPages; renderTable(); };
+    navGroup.appendChild(lastBtn);
+
+    controls.appendChild(navGroup);
+  }
+
+  // Функция для сброса зума
+  function resetZoom() {
+    if (balanceChart) {
+      balanceChart.resetZoom();
+    }
+  }
+
+  function updateChart(balanceData) {
+    const chartCanvas = document.getElementById('balanceChart');
+    if (!chartCanvas) return;
+    const ctx = chartCanvas.getContext('2d');
+
+    // Получаем текущее значение баланса из HTML для точки "по умолчанию"
+    const balanceText = document.getElementById('balance').innerText;
+    const currentBalance = parseFloat(balanceText.replace(' $', '')) || 1000.0;
+
+    let formattedData = [];
+
+    if (!balanceData || balanceData.length === 0) {
+      // Точка "посередине" если данных нет
+      formattedData = [{
+        x: new Date(),
+        y: currentBalance
+      }];
+    } else {
+      formattedData = balanceData.map(item => ({
+        x: new Date(item.timestamp),
+        y: Number(item.balance)
+      })).sort((a, b) => a.x - b.x);
+    }
+
+    if (balanceChart && balanceChart.data && balanceChart.data.datasets) {
+      balanceChart.data.datasets[0].data = formattedData;
+      balanceChart.update('none');
+    } else {
+      // Если график еще не создан или был удален
+      balanceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Баланс $',
+            data: formattedData,
+            borderColor: '#00ff88',
+            backgroundColor: 'rgba(0, 255, 136, 0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointBackgroundColor: '#00ff88'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'minute',
+                displayFormats: { minute: 'HH:mm' }
+              },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              // Чтобы одна точка не прилипала к краям
+              suggestedMin: currentBalance - 10,
+              suggestedMax: currentBalance + 10
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            zoom: {
+              pan: {
+                enabled: true,
+                mode: 'x',
+                threshold: 10
+              },
+              zoom: {
+                wheel: { enabled: true },
+                pinch: { enabled: true },
+                mode: 'x',
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  async function updateCooldowns() {
+    try {
+      const res = await fetch('/api/cooldowns');
+      const data = await res.json();
+      const container = document.getElementById('cooldown-container');
+      container.innerHTML = '';
+      Object.entries(data).forEach(([symbol, time]) => {
+        container.innerHTML += `<span class="badge rounded-pill bg-warning text-dark me-2 mb-2"><i class="bi bi-clock"></i> ${symbol.replace("USDT","")} до ${time}</span>`;
+      });
+    } catch (e) {}
+  }
+
+  // Функция для закрытия сделки вручную
+  async function closeTrade(symbol) {
+    if (!confirm(`Вы уверены, что хотите принудительно закрыть сделку по ${symbol}?`)) return;
+
+    try {
+      const response = await fetch(`/api/close-trade?symbol=${symbol}`, { method: 'POST' });
+      if (response.ok) {
+        updateDashboard();
+      } else {
+        alert("Ошибка при закрытии сделки");
+      }
+    } catch (error) {
+      console.error("Ошибка:", error);
+    }
+  }
+
+  function toggleMenu() {
+    const menu = document.getElementById('glassMenu');
+    const icon = document.getElementById('menuIcon');
+
+    if (menu.classList.contains('active')) {
+      menu.classList.remove('active');
+      icon.classList.remove('open');
+      setTimeout(() => { menu.style.display = 'none'; }, 300);
+      document.body.style.overflow = 'auto'; // Включаем скролл обратно
+    } else {
+      menu.style.display = 'flex';
+      setTimeout(() => {
+        menu.classList.add('active');
+        icon.classList.add('open');
+      }, 10);
+      document.body.style.overflow = 'hidden'; // Выключаем скролл сайта
+    }
+  }
+
+  // Закрытие меню при клике на фон
+  document.getElementById('glassMenu').addEventListener('click', function(e) {
+    if (e.target === this) toggleMenu();
+  });
+
+  updateDashboard();
+  setInterval(updateDashboard, 2000);
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
