@@ -8,8 +8,8 @@ import java.util.*;
 @Service
 public class TelegramAPI {
 
-    private final String BOT_TOKEN = "8473858051:AAGOB7wANVfbU5hRQjCZs_k7J-JDFsT6quM";
-    private final String CHAT_ID = "631369892";
+    private final String BOT_TOKEN = "";
+    private final String CHAT_ID = "";
     private final String API_URL = "https://api.telegram.org/bot" + BOT_TOKEN;
 
     private long lastUpdateId = 0;
