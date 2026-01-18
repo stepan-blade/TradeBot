@@ -1,4 +1,4 @@
-package com.example.demo.intarfaces;
+package com.example.demo.interfaces;
 
 import com.example.demo.data.BotSettings;
 import org.springframework.data.jpa.repository.JpaRepository;

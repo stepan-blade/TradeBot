@@ -7,8 +7,8 @@ class ChartManager {
     update(balanceData) {
         if (!this.ctx) return;
 
-        const balanceText = document.getElementById('balance')?.innerText || "1000";
-        const currentBalance = parseFloat(balanceText.replace(' $', '')) || 1000.0;
+        const balanceText = document.getElementById('balance')?.innerText || "0";
+        const currentBalance = parseFloat(balanceText.replace(' USDT', '')) || 0;
 
         let formattedData = [];
 
@@ -34,7 +34,7 @@ class ChartManager {
             type: 'line',
             data: {
                 datasets: [{
-                    label: 'Баланс $',
+                    label: 'Баланс USDT',
                     data: data,
                     borderColor: '#00ff88',
                     backgroundColor: 'rgba(0, 255, 136, 0.1)',

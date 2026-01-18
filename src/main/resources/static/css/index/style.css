@@ -1,7 +1,13 @@
 body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
 
 /* Карточки */
-.card { background-color: #1e1e1e; border: 1px solid #333; border-radius: 12px; margin-bottom: 1rem; color: #ffffff; }
+.card {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    color: #ffffff;
+}
 
 /* Цвета прибыли */
 .profit-pos { color: #00ff88 !important; }
@@ -10,8 +16,19 @@ body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-
 .profit-neg, .profit-neg small { color: #ff4d4d !important; }
 
 /* Статистика */
-.stat-label { font-size: 0.8rem; color: #aaaaaa; text-transform: uppercase; letter-spacing: 1px; }
-.balance-val { font-size: calc(1.5rem + 1vw); font-weight: bold; line-height: 1.2; color: #ffffff; }
+.stat-label {
+    font-size: 0.8rem;
+    color: #aaaaaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.balance-val {
+    font-size: calc(0.9rem + 1vw);
+    font-weight: bold;
+    line-height: 1.2;
+    color: #ffffff;
+}
 
 /* ТАБЛИЦА */
 .table-responsive {

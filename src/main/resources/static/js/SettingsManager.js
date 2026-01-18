@@ -10,8 +10,9 @@ class SettingsManager {
         }
     }
 
+        // 1. НАСТРОЙКИ БОТА
     async init() {
-        // 1. ПОДТЯГИВАЕМ ДАННЫЕ ИЗ БД
+
         try {
             const settings = await window.api.getSettings();
             if (settings) {
@@ -22,9 +23,8 @@ class SettingsManager {
             console.error("Ошибка загрузки данных из БД:", err);
         }
 
-        // 2. ПЕРЕХВАТЫВАЕМ ОТПРАВКУ (чтобы не открывалась страница с JSON)
         this.form.onsubmit = async (e) => {
-            e.preventDefault(); // Это самое важное!
+            e.preventDefault();
 
             if (this.gear) this.gear.classList.add('gear-rotate');
 
@@ -44,7 +44,7 @@ class SettingsManager {
         };
     }
 
-    // ЛОГИКА ОЧИСТКИ
+    // 2. ОЧИСТКИ ИСТОРИИ СДЕЛОК
     async confirmClear() {
         if (!confirm("Вы уверены? Это действие безвозвратно удалит всю историю сделок.")) return;
 

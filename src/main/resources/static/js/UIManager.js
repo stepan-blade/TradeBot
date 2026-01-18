@@ -76,13 +76,15 @@ class UIManager {
 
         // 1. Баланс
         if (this.balanceEl) {
-            this.balanceEl.innerText = `${Number(data.balance || 0).toFixed(2)} $`;
+            this.balanceEl.innerText = `${Number(data.balance || 0).toFixed(6)} USDT`;
         }
 
         // 2. Общий процент (под балансом)
         if (this.percentChangeEl) {
-            const perc = data.calculatedPercent || 0;
-            this.percentChangeEl.innerText = `${perc >= 0 ? '+' : ''}${perc.toFixed(2)}%`;
+            let perc = data.calculatedPercent || 0;
+            perc = Number(perc);
+            const percStr = perc.toFixed(2);
+            this.percentChangeEl.innerText = `${perc >= 0 ? '+' : ''}${percStr}%`;
             this.percentChangeEl.className = `fw-bold fs-6 mb-3 ${perc >= 0 ? 'profit-pos' : 'profit-neg'}`;
         }
 
@@ -95,7 +97,7 @@ class UIManager {
         if (this.todayProfitEl) {
             const val = data.todayProfit || 0;
             const perc = data.todayPercent || 0;
-            this.todayProfitEl.innerText = `${val.toFixed(2)} $ (${perc.toFixed(2)}%)`;
+            this.todayProfitEl.innerText = `${val} $ (${perc}%)`;
             this.todayProfitEl.className = `fw-bold fs-6 lh-1 ${val >= 0 ? 'profit-pos' : 'profit-neg'}`;
         }
 
@@ -103,7 +105,7 @@ class UIManager {
         if (this.totalPnlEl) {
             const pnl = data.totalPnl || 0;
             const pnlPerc = data.totalPnlPercent || 0;
-            this.totalPnlEl.innerText = `${pnl.toFixed(2)} $ (${pnlPerc.toFixed(2)}%)`;
+            this.totalPnlEl.innerText = `${pnl} $ (${pnlPerc}%)`;
             this.totalPnlEl.className = `fw-bold fs-6 lh-1 ${pnl >= 0 ? 'profit-pos' : 'profit-neg'}`;
 
             // Показываем контейнер только если есть активные сделки (в обороте > 0)
@@ -130,6 +132,10 @@ class UIManager {
         osc.frequency.setValueAtTime(isSuccess ? 523.25 : 220, this.audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 0.4);
         osc.start(); osc.stop(this.audioCtx.currentTime + 0.4);
+    }
+
+    renderCooldowns(cooldowns) {
+        console.log("Активные cooldowns:", cooldowns);
     }
 }
 window.ui = new UIManager();

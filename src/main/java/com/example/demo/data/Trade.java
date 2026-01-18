@@ -9,22 +9,23 @@ public class Trade {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id; //ID сделки (№)
     private String asset; //Тип актива (валютная пара)
-    private Double bestPrice = 0.0; //Лучшая цена актива за период открытой сделки
+    private double quantity; //Кол-во монет
+    private double volume; // Объем сделки в USDT
+    private String entryTime; //Время открытия сделки
+    private String exitTime; //Время закрытия сделки
     private double entryPrice; //Цена актива на входе
     private double exitPrice; //Цена актива на выходе
+    private Double bestPrice = 0.0; //Лучшая цена актива за период открытой сделки
     private double profit; //Результат сделки в %
     private String status; // "OPEN" или "CLOSED"
     private Double stopLoss = 0.0; //Точка для стоп-лосс
     private Double takeProfit = 0.0; //Точка для тэйк-профит
     private String type; // LONG или SHORT
-    private double volume; // Объем сделки в USDT
-    private String entryTime; //Время открытия сделки
-    private String exitTime; //Время закрытия сделки
 
     public Trade() {
     }
 
-    public Trade(String time, String asset, String type, double entryPrice, double volume) {
+    public Trade(String time, String asset, String type, double entryPrice, double volume, double quantity) {
         this.entryTime = time;
         this.asset = asset;
         this.type = type;
@@ -36,10 +37,11 @@ public class Trade {
         this.exitPrice = 0.0;
     }
 
-    // --- ГЕТТЕРЫ ---
     public Long getId() { return id; }
 
     public String getAsset() { return asset; }
+
+    public double getQuantity() { return quantity; }
 
     public double getBestPrice() { return bestPrice == null ? 0.0 : bestPrice; }
 
@@ -64,8 +66,11 @@ public class Trade {
     public String getExitTime() { return exitTime; }
 
 
-    // ---  СЕТТЕРЫ ---
+
     public void setAsset(String asset) { this.asset = asset; }
+
+    public void setQuantity(double quantity) { this.quantity = quantity; }
+
     public void setBestPrice(double bestPrice) { this.bestPrice = bestPrice; }
 
     public void setEntryPrice(double entryPrice) { this.entryPrice = entryPrice; }

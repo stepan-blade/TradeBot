@@ -67,64 +67,59 @@ class BinanceBotApp {
 
     // ГЛАВНЫЙ МЕТОД UPDATE DASHBOARD
     async updateDashboard() {
-        // 0. Кулдауны
         try {
+            // 1. Cooldowns
             const cooldowns = await this.api.fetchCooldowns();
             this.ui.renderCooldowns(cooldowns);
-        } catch (e) {}
 
-        try {
-            // 1. Статус
+            // 2. Основные данные статуса (баланс, профит, история)
             const data = await this.api.fetchStatus();
             this.state.fullHistory = data.history || [];
 
-            // 2. Баланс
-            const currentBalance = data.balance || 1000.0;
-            const initialDeposit = 1000.0;
+            // 3. Реальный баланс и метрики
+            const currentBalance = Number(data.balance || 0);
+            const inTrade = this.state.fullHistory
+                .filter(t => t.status === 'OPEN')
+                .reduce((sum, t) => sum + (Number(t.volume) || 0), 0).toFixed(2);
 
-            // 3. РАСЧЕТ ПРОФИТА ЗА СЕГОДНЯ
-            const todayPrefix = new Date().toLocaleDateString('ru-RU');
-            const todayProfit = data.todayProfitUSDT || 0;
+            // 4. Профит за сегодня
+            const todayProfit = Number(data.todayProfitUSDT || 0).toFixed(2);
+            const todayPercent = todayProfit > 0 ? (todayProfit / currentBalance * 100).toFixed(2) : 0;
 
-            const startBalanceToday = currentBalance - todayProfit;
-            const todayPercent = startBalanceToday > 0 ? (todayProfit / startBalanceToday) * 100 : 0;
+            // 5. Общий прирост
+            const initialDeposit = data.balance;
+            const calculatedPercent = ((currentBalance - initialDeposit) / initialDeposit * 100).toFixed(2);
 
-            // 4. РАСЧЕТ PNL
-            const openTrades = this.state.fullHistory.filter(t => t.status === 'OPEN');
+            // 6. PnL активных сделок (расчёт нереализованной прибыли)
             let totalUnrealizedPnL = 0;
-            const totalInTrade = openTrades.reduce((sum, t) => sum + (t.volume || 0), 0);
+            this.state.fullHistory
+                .filter(t => t.status === 'OPEN')
+                .forEach(trade => {
+                    const currentPrice = trade.exitPrice || trade.entryPrice || 0;
+                    if (currentPrice > 0 && trade.entryPrice > 0) {
+                        let pnlPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
+                        if (trade.type === 'SHORT') pnlPercent *= -1;
+                        totalUnrealizedPnL += trade.volume * ((pnlPercent - 0.2) / 100); // -0.2% комиссия
+                    }
+                });
 
-            openTrades.forEach(trade => {
-                const currentPrice = trade.exitPrice || trade.entryPrice || 0;
-                const entryPrice = trade.entryPrice || 0;
-                if (entryPrice > 0) {
-                    let pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
-                    if (trade.type === 'SHORT') pnlPercent *= -1;
-                    totalUnrealizedPnL += trade.volume * ((pnlPercent - 0.2) / 100);
-                }
-            });
-
-            // 5. ОБЩИЙ ПРИРОСТ
-            const diffUsdt = currentBalance - initialDeposit;
-            const calculatedPercent = (diffUsdt / initialDeposit) * 100;
-
+            // 7. Обновляем UI (передаём все нужные данные)
             this.ui.updateHeaderStats({
                 balance: currentBalance,
+                inTrade: inTrade,
                 todayProfit: todayProfit,
                 todayPercent: todayPercent,
-                totalPnl: totalUnrealizedPnL,
-                totalPnlPercent: (totalUnrealizedPnL / currentBalance) * 100,
-                inTrade: totalInTrade,
-                diffUsdt: diffUsdt,
+                totalPnl: totalUnrealizedPnL.toFixed(2),
+                totalPnlPercent: currentBalance > 0 ? (totalUnrealizedPnL / currentBalance * 100).toFixed(2) : 0,
                 calculatedPercent: calculatedPercent
             });
 
-            // 6. График
+            // 8. График доходности (если balanceHistory приходит)
             if (data.balanceHistory && Array.isArray(data.balanceHistory)) {
                 this.chart.update(data.balanceHistory);
             }
 
-            // 7. Таблица
+            // 9. Таблица сделок
             this.table.render(this.state.fullHistory);
 
         } catch (error) {
@@ -142,7 +137,7 @@ class BinanceBotApp {
             const confirmMsg = `Закрыть позицию ${symbol}?\n\n` +
                 `Текущая цена: ${data.currentPrice}\n` +
                 `Ожидаемый профит: ${profitText} $ (${data.percent}%)\n` +
-                `*с учетом комиссии 0.2% ${emoji}`;
+                `С учетом комиссии 0.2% ${emoji}`;
 
             if (confirm(confirmMsg)) {
                 await this.api.postCloseTrade(symbol);

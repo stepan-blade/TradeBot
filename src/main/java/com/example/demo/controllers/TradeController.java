@@ -1,12 +1,12 @@
 package com.example.demo.controllers;
 
 import com.example.demo.data.BotSettings;
-import com.example.demo.DemoTradingBot;
 import com.example.demo.data.Trade;
-import com.example.demo.intarfaces.BalanceHistoryRepository;
-import com.example.demo.intarfaces.BotSettingsRepository;
-import com.example.demo.intarfaces.TradeRepository;
-import com.example.demo.services.TradeService;
+import com.example.demo.interfaces.BalanceHistoryRepository;
+import com.example.demo.interfaces.BotSettingsRepository;
+import com.example.demo.interfaces.TradeRepository;
+import com.example.demo.services.api.BinanceAPI;
+import com.example.demo.services.trade.TradeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,49 +23,77 @@ import java.util.stream.Collectors;
 @RequestMapping("/api")
 public class TradeController {
 
-    private final DemoTradingBot bot;
-    @Autowired
-    private TradeRepository tradeRepository;
-    @Autowired
-    private BotSettingsRepository settingsRepository;
-    @Autowired
-    private BalanceHistoryRepository balanceHistoryRepository;
-    @Autowired
-    private TradeService tradeService;
+    /**
+     * @see #getStatus() - Формирует сводный отчет о текущем состоянии торговой системы.
+     * @see #getCooldowns() - Возвращает список активов, находящихся в режиме "ожидания" (cooldown) после закрытия сделки.
+     * @see #clearHistory() - Удаляет все завершенные сделки из базы данных.
+     * @see #closeSpecificTrade(String) -  Выполняет принудительное закрытие конкретной активной сделки по запросу пользователя.
+     * @see #getSettings() - Извлекает глобальные настройки бота из базы данных.
+     * @see #saveSettings(String, String) - Обновляет конфигурацию торгового алгоритма.
+     * @see #previewClose(String) - Предварительный расчет финансового результата перед закрытием сделки.
+     */
 
-    public TradeController(DemoTradingBot bot) {
-        this.bot = bot;
+    private final BinanceAPI binanceAPI;
+    private final TradeService tradeService;
+    private final TradeRepository tradeRepository;
+    private final BotSettingsRepository settingsRepository;
+    private final BalanceHistoryRepository balanceHistoryRepository;
+
+    @Autowired
+    public TradeController(BinanceAPI binanceAPI, TradeService tradeService, TradeRepository tradeRepository, BotSettingsRepository settingsRepository, BalanceHistoryRepository balanceHistoryRepository) {
+        this.binanceAPI = binanceAPI;
+        this.tradeService = tradeService;
+        this.tradeRepository = tradeRepository;
+        this.settingsRepository = settingsRepository;
+        this.balanceHistoryRepository = balanceHistoryRepository;
     }
 
+    /**
+     * Формирует сводный отчет о текущем состоянии торговой системы.
+     * <p>
+     * Метод агрегирует данные из разных репозиториев:
+     * 1. Получает актуальный баланс через Binance API.
+     * 2. Подтягивает историю всех сделок.
+     * 3. Для всех ОТКРЫТЫХ позиций динамически обновляет цену последней фиксации (exitPrice),
+     * чтобы интерфейс мог отображать актуальную нереализованную прибыль/убыток.
+     *
+     * @return Map со значениями баланса, общего профита в %, доходности за сегодня в USDT и полной историей.
+     */
     @GetMapping("/status")
     public Map<String, Object> getStatus() {
         Map<String, Object> status = new HashMap<>();
 
-        BotSettings settings = settingsRepository.findById("MAIN_SETTINGS")
-                .orElse(new BotSettings(1000.0));
+        double balance = tradeService.getBalance();
 
-        // 1. Получаем все сделки
         List<Trade> allTrades = tradeRepository.findAll();
 
-        // 2. ОБНОВЛЯЕМ ТЕКУЩИЕ ЦЕНЫ ДЛЯ ОТКРЫТЫХ СДЕЛОК
         for (Trade trade : allTrades) {
             if ("OPEN".equals(trade.getStatus())) {
-                double currentPrice = tradeService.getCurrentPrice(trade.getAsset());
+                double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
                 if (currentPrice > 0) {
                     trade.setExitPrice(currentPrice);
                 }
             }
         }
 
-        status.put("balance", settings.getBalance());
-        status.put("profitPercent", tradeService.calculateProfitPercent());
-        status.put("history", allTrades);
-        status.put("todayProfitUSDT", tradeService.getTodayProfitUsdt());
+        status.put("balance", balance);
+        status.put("profitPercent", tradeService.calculateAllProfitPercent());
+        status.put("todayProfitUSDT", tradeService.calculateTodayProfitUSDT());
         status.put("balanceHistory", balanceHistoryRepository.findAll());
+        status.put("history", allTrades);
 
         return status;
     }
 
+    /**
+     * Возвращает список активов, находящихся в режиме "ожидания" (cooldown) после закрытия сделки.
+     * <p>
+     * Это защитный механизм: бот не заходит в одну и ту же монету сразу после продажи.
+     * Метод фильтрует карту cooldownMap в сервисе, оставляя только те активы, время блокировки
+     * которых еще не истекло относительно текущего момента.
+     *
+     * @return Map, где ключ — символ актива (BTCUSDT), а значение — время окончания блокировки (ЧЧ:мм).
+     */
     @GetMapping("/cooldowns")
     public Map<String, String> getCooldowns() {
         Map<String, String> formattedMap = new HashMap<>();
@@ -79,6 +107,15 @@ public class TradeController {
         return formattedMap;
     }
 
+    /**
+     * Удаляет все завершенные сделки из базы данных.
+     * <p>
+     * Используется для очистки графиков и списков от старых данных.
+     * Метод находит в БД только те записи, статус которых равен "CLOSED",
+     * чтобы случайно не удалить активные позиции.
+     *
+     * @return ResponseEntity с текстовым уведомлением о результате операции.
+     */
     @PostMapping("/clear-history")
     public ResponseEntity<String> clearHistory() {
         List<Trade> closedTrades = tradeRepository.findAll().stream()
@@ -92,6 +129,15 @@ public class TradeController {
         return ResponseEntity.ok("Нет сделок для удаления");
     }
 
+    /**
+     * Выполняет принудительное закрытие конкретной активной сделки по запросу пользователя.
+     * <p>
+     * 1. Проверяет наличие открытой позиции по указанному символу.
+     * 2. Запрашивает текущую рыночную цену.
+     * 3. Если цена получена, вызывает бизнес-логику закрытия в TradeService.
+     * @param symbol Валютная пара (например, "ETHUSDT").
+     * @return Ответ 200 (OK), 404 (не найдено) или 502 (ошибка связи с биржей).
+     */
     @PostMapping("/close-trade")
     public ResponseEntity<String> closeSpecificTrade(@RequestParam String symbol) {
         Optional<Trade> tradeOpt = tradeService.getActiveTrades().stream()
@@ -99,7 +145,7 @@ public class TradeController {
                 .findFirst();
 
         if (tradeOpt.isPresent()) {
-            double price = tradeService.getCurrentPrice(symbol);
+            double price = binanceAPI.getCurrentPrice(symbol);
             if (price > 0) {
                 tradeService.closePosition(tradeOpt.get(), price, "Manual Close ⚡");
                 return ResponseEntity.ok("Trade closed");
@@ -110,6 +156,14 @@ public class TradeController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Trade not found");
     }
 
+    /**
+     * Извлекает глобальные настройки бота из базы данных.
+     * <p>
+     * Если настройки еще ни разу не сохранялись, возвращает новый объект с
+     * параметрами по умолчанию
+     *
+     * @return Объект BotSettings с данными о торгуемых парах и проценте входа в сделку.
+     */
     @GetMapping("/settings")
     public ResponseEntity<BotSettings> getSettings() {
         BotSettings settings = settingsRepository.findById("MAIN_SETTINGS")
@@ -117,6 +171,16 @@ public class TradeController {
         return ResponseEntity.ok(settings);
     }
 
+    /**
+     * Обновляет конфигурацию торгового алгоритма.
+     * <p>
+     * Позволяет "на лету" изменить список монет, по которым бот ищет сигналы,
+     * и объем USDT, выделяемый на каждую сделку (в % от баланса).
+     *
+     * @param assets          Строка с символами через запятую (напр. "BTCUSDT,ETHUSDT").
+     * @param tradePercentStr Процент от свободного баланса для покупки актива.
+     * @return JSON со статусом успеха или ошибкой 400, если формат данных неверный.
+     */
     @PostMapping("/save-settings")
     public ResponseEntity<?> saveSettings(
             @RequestParam("assets") String assets,
@@ -138,6 +202,16 @@ public class TradeController {
         }
     }
 
+    /**
+     * Предварительный расчет финансового результата перед закрытием сделки.
+     * <p>
+     * Позволяет пользователю увидеть "грязную" прибыль, чистую прибыль (за вычетом
+     * стандартной комиссии 0.08%) и текущую рыночную цену без фактического исполнения ордера.
+     * Работает как симуляция закрытия в реальном времени.
+     *
+     * @param symbol Валютная пара для оценки.
+     * @return Объект с потенциальным профитом в USDT и процентах.
+     */
     @GetMapping("/preview-close")
     public ResponseEntity<Map<String, Object>> previewClose(@RequestParam String symbol) {
         Optional<Trade> tradeOpt = tradeRepository.findAll().stream()
@@ -146,13 +220,12 @@ public class TradeController {
 
         if (tradeOpt.isPresent()) {
             Trade trade = tradeOpt.get();
-            double currentPrice = tradeService.getCurrentPrice(symbol);
+            double currentPrice = binanceAPI.getCurrentPrice(symbol);
 
-            double diff = ((currentPrice - trade.getEntryPrice()) / trade.getEntryPrice()) * 100;
-            if ("SHORT".equals(trade.getType())) diff *= -1;
-
-            double netProfitPercent = diff - 0.2;
-            double profitUsdt = trade.getVolume() * (netProfitPercent / 100);
+            double netProfitPercent = tradeService.calculateNetResultPercent(
+                    trade.getEntryPrice(), currentPrice, symbol, trade.getType()
+            );
+            double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
 
             Map<String, Object> response = new HashMap<>();
             response.put("profitUsdt", Math.round(profitUsdt * 100.0) / 100.0);

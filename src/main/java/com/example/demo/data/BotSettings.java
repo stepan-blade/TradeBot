@@ -13,16 +13,12 @@ public class BotSettings {
     private String assets = "BTCUSDT,ETHUSDT,SOLUSDT";
     private double tradePercent = 10.0;
     public BotSettings() {}
-    public BotSettings(double balance) {
-        this.balance = balance;
-    }
 
-    // --- ГЕТТЕРЫ ---
     public double getTradePercent() { return tradePercent; }
     public String getAssets() { return assets; }
     public double getBalance() { return balance; }
 
-    // ---  СЕТТЕРЫ ---
+
     public void setBalance(double balance) { this.balance = balance; }
     public void setAssets(String assets) { this.assets = assets; }
     public void setTradePercent(double tradePercent) { this.tradePercent = tradePercent; }

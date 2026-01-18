@@ -20,12 +20,11 @@ public class BalanceHistory {
         this.timestamp = timestamp;
     }
 
-    // --- ГЕТТЕРЫ ---
     public Long getId() { return id; }
     public Double getBalance() { return balance; }
-
-    // ---  СЕТТЕРЫ ---
-    public void setBalance(Double balance) { this.balance = balance; }
     public LocalDateTime getTimestamp() { return timestamp; }
+
+
+    public void setBalance(Double balance) { this.balance = balance; }
     public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
 }

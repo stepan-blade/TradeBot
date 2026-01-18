@@ -20,7 +20,7 @@ class TradingTable {
     render(fullHistory) {
         this.updateAssetFilterList(fullHistory);
 
-        // ОБНОВЛЕНИЕ ИНДИКАТОРОВ (ТОЧЕК)
+        // 1. ОБНОВЛЕНИЕ ИНДИКАТОРОВ (ТОЧЕК)
         const filters = this.app.state.filters;
         const start = document.getElementById('filter-date-start').value;
         const end = document.getElementById('filter-date-end').value;
@@ -38,10 +38,10 @@ class TradingTable {
         const dotRes = document.getElementById('dot-result');
         if (dotRes) dotRes.style.display = (filters.result !== 'ALL') ? 'inline-block' : 'none';
 
-        // 1. Фильтрация по статусу (OPEN/CLOSED)
+        // 2. ФИЛЬТРАЦИЯ ПО СТАТУСУ (OPEN/CLOSED)
         let data = fullHistory.filter(trade => trade.status === this.app.state.currentView);
 
-        // 2. СОРТИРОВКА (ЛОГИКА С ПАРСИНГОМ ДАТ)
+        // СОРТИРОВКА (ЛОГИКА С ПАРСИНГОМ ДАТ)
         data.sort((a, b) => {
             try {
                 const currentView = this.app.state.currentView;
@@ -60,7 +60,7 @@ class TradingTable {
             } catch (e) { return 0; }
         });
 
-        // 3. Применяем фильтры
+        // 3. ФИЛЬТР РЕЗУЛЬТАТОВ
         if (filters.asset !== 'ALL') data = data.filter(t => t.asset === filters.asset);
         if (filters.type !== 'ALL') data = data.filter(t => t.type === filters.type);
         if (filters.result !== 'ALL') {
@@ -68,7 +68,7 @@ class TradingTable {
             if (filters.result === 'LOSS') data = data.filter(t => t.profit < 0);
         }
 
-        // 4. Фильтр дат
+        // 4. ФИЛЬТР ДАТ
         if (start || end) {
             data = data.filter(t => {
                 const currentView = this.app.state.currentView;
@@ -98,7 +98,7 @@ class TradingTable {
             });
         }
 
-        // 5. Отрисовка заголовков (логика скрытия колонок)
+        // 5. ОТРИСОВКА ЗАГОЛОВКОВ (ЛОГИКА СКРЫТИЯ КОЛОНОК)
         this.container.innerHTML = '';
         const actionHeader = document.getElementById('col-action-header');
         if (actionHeader) {
@@ -140,7 +140,7 @@ class TradingTable {
             return;
         }
 
-        // 6. Пагинация и рендер строк
+        // 6. ПАГИНАЦИЯ И РЕНДЕР СТРОК
         const startIndex = (this.app.state.currentPage - 1) * this.app.state.itemsPerPage;
         const paginatedItems = data.slice(startIndex, startIndex + this.app.state.itemsPerPage);
 
