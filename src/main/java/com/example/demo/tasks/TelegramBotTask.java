@@ -11,8 +11,12 @@ public class TelegramBotTask {
     @Autowired
     private TelegramService telegramService;
 
-    @Scheduled(fixedRate = 2000)
+    @Scheduled(fixedDelay = 2000)
     public void telegramLoop() {
-        telegramService.handleTelegramCommands();
+        try {
+            telegramService.handleTelegramCommands();
+        } catch (Exception e) {
+            System.err.println(">>> [ERROR] Ошибка в цикле: " + e.getMessage());
+        }
     }
 }

@@ -41,10 +41,11 @@ public class BotActiveTrades {
             return;
         }
 
-        String text = "" +
-                "⚠️ ВНИМАНИЕ\n" +
-                "Вы уверены, что хотите закрыть ВСЕ активные сделки?\n" +
-                "Это действие нельзя отменить.\n";
+        String text = """
+                ⚠️ ВНИМАНИЕ
+                Вы уверены, что хотите закрыть ВСЕ активные сделки?
+                Это действие нельзя отменить.
+                """;
 
         telegramAPI.sendConfirmationButtons(
                 text,
@@ -70,9 +71,10 @@ public class BotActiveTrades {
             String pnlIcon = pnl >= 0 ? "🟢" : "🔴";
 
             String text = String.format(
-                    "📝 Сделка: %s (%s)\n" +
-                            "💰 Объем: %.2f USDT\n" +
-                            "📊 PnL: %s %.2f%%",
+                    """
+                            📝 Сделка: %s (%s)
+                            💰 Объем: %.2f USDT
+                            📊 PnL: %s %.2f%%""",
                     FormatterUtil.formatSymbol(t.getAsset()), t.getType(), t.getVolume(), pnlIcon, pnl
             );
 
@@ -98,8 +100,9 @@ public class BotActiveTrades {
             double profit = tradeService.calculateActiveProfitPercent(t, price);
 
             String text = String.format(
-                    "Закрыть %s?\n" +
-                            "Текущий профит: %.2f%%",
+                    """
+                            Закрыть %s? +
+                            Текущий профит: %.2f%%""",
                     symbol, profit);
 
             telegramAPI.sendConfirmationButtons(text, "✅ Да",

@@ -1,4 +1,4 @@
-package com.example.demo.services.trade.strategys.test;
+package com.example.demo.services.trade.strategys;
 
 import com.example.demo.data.Trade;
 import com.example.demo.interfaces.TradeRepository;
@@ -6,7 +6,9 @@ import com.example.demo.services.api.BinanceAPI;
 import com.example.demo.services.trade.IndicatorService;
 import com.example.demo.services.trade.TradeService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
+@Service
 public class PositionManager {
 
     private final BinanceAPI binanceAPI;
@@ -38,12 +40,12 @@ public class PositionManager {
                 trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType()
         );
 
-        // Выход по RSI (минутный таймфрейм)
-        double rsi = indicatorService.calculateRSI(binanceAPI.getKlines(trade.getAsset(), "1m", 15), 14);
-        if (rsi > 75) {
-            tradeService.closePosition(trade, currentPrice, "💰 RSI Overbought Exit");
-            return;
-        }
+//        // Выход по RSI (минутный таймфрейм)
+//        double rsi = indicatorService.calculateRSI(binanceAPI.getKlines(trade.getAsset(), "1m", 15), 14);
+//        if (rsi > 75) {
+//            tradeService.closePosition(trade, currentPrice, "💰 RSI Overbought Exit");
+//            return;
+//        }
 
         // Хард тейк-профит сравнивается с ЧИСТОЙ прибылью
         if (netProfit >= 2.5) {
@@ -68,34 +70,46 @@ public class PositionManager {
      */
     public void handleTrailingStop(Trade trade, double currentPrice, double netProfit) {
         double best = trade.getBestPrice();
-        boolean updated = false;
+        boolean needsUpdateOnExchange = false;
+        double newStopPrice = trade.getStopLoss();
 
-        // Обновляем лучшую цену (для BUY)
         if (currentPrice > best) {
             trade.setBestPrice(currentPrice);
-            updated = true;
+            tradeRepository.save(trade);
         }
 
-        // Трейлинг-стоп
+        // Логика расчета
         if (netProfit >= 0.8 && netProfit < 2.0) {
-            double safeStop = trade.getEntryPrice() * 1.005; // +0.5% от входа
-            if (trade.getStopLoss() < safeStop) {
-                trade.setStopLoss(safeStop);
-                updated = true;
+            double safeStop = trade.getEntryPrice() * 1.005;
+            if (newStopPrice < safeStop) {
+                newStopPrice = safeStop;
+                needsUpdateOnExchange = true;
             }
         } else if (netProfit >= 2.0) {
-            double activeTrailing = trade.getBestPrice() * 0.985; // 1.5% откат от пика
-            if (trade.getStopLoss() < activeTrailing) {
-                trade.setStopLoss(activeTrailing);
-                updated = true;
+            double activeTrailing = trade.getBestPrice() * 0.985;
+            if (newStopPrice < activeTrailing) {
+                newStopPrice = activeTrailing;
+                needsUpdateOnExchange = true;
             }
         }
 
-        if (updated) tradeRepository.save(trade);
+        if (needsUpdateOnExchange) {
+            try {
+                // 1. Отменяем старые ордера
+                binanceAPI.cancelAllOrders(trade.getAsset());
 
-        // Срабатывание стопа
-        if (currentPrice <= trade.getStopLoss()) {
-            tradeService.closePosition(trade, currentPrice, "🛡️ Trailing Stop (Secured)");
+                // 2. Ставим новый ордер
+                double limitPrice = newStopPrice * 0.995;
+                String response = binanceAPI.placeStopLossLimit(trade.getAsset(), trade.getQuantity(), newStopPrice, limitPrice);
+
+                if (response != null) {
+                    trade.setStopLoss(newStopPrice);
+                    tradeRepository.save(trade);
+                    System.out.println("✅ SL обновлен: " + newStopPrice);
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Ошибка трейлинга: " + e.getMessage());
+            }
         }
     }
 }

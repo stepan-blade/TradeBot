@@ -1,32 +1,4 @@
-2026-01-18 20:30:14 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"
-Data conversion error converting "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:30:14 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"
-Data conversion error converting "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:33:19 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'' (TRADES: ""STOP_LOSS"" DOUBLE PRECISION)"
-Data conversion error converting "'' (TRADES: ""STOP_LOSS"" DOUBLE PRECISION)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:33:19 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'' (TRADES: ""STOP_LOSS"" DOUBLE PRECISION)"
-Data conversion error converting "'' (TRADES: ""STOP_LOSS"" DOUBLE PRECISION)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:34:14 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'-' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"
-Data conversion error converting "'-' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:34:14 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'-' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"
-Data conversion error converting "'-' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:34:40 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"
-Data conversion error converting "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
-2026-01-18 20:34:40 jdbc[13]: exception
-org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"
-Data conversion error converting "'' (TRADES: ""EXIT_PRICE"" DOUBLE PRECISION NOT NULL)"; SQL statement:
-INSERT INTO "PUBLIC"."TRADES"("ID","ASSET","BEST_PRICE","ENTRY_PRICE","ENTRY_TIME","EXIT_PRICE","EXIT_TIME","PROFIT","QUANTITY","STATUS","STOP_LOSS","TAKE_PROFIT","TYPE","VOLUME")VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) [22018-214]
+2026-01-19 19:57:38 jdbc[13]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Синтаксическая ошибка в выражении SQL "UPDATE BOT_SETTINGS SET BALANCE = 11,[*]46 WHERE ID = 'MAIN_SETTINGS'"; ожидалось "identifier"
+Syntax error in SQL statement "UPDATE BOT_SETTINGS SET BALANCE = 11,[*]46 WHERE ID = 'MAIN_SETTINGS'"; expected "identifier"; SQL statement:
+UPDATE BOT_SETTINGS SET BALANCE = 11,46 WHERE ID = 'MAIN_SETTINGS' [42001-214]

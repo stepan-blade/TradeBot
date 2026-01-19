@@ -23,13 +23,11 @@ public class TelegramService {
 
     public void handleTelegramCommands() {
         String msg = telegramAPI.getLatestMessage();
-
         String callbackData = telegramAPI.getLatestCallbackData();
 
         if (callbackData != null && !callbackData.isEmpty()) {
             System.out.println("🔘 Получен Callback: " + callbackData);
             botActiveTrades.handleCallback(callbackData);
-            return;
         }
 
         if (msg == null || msg.isEmpty()) return;

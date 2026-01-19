@@ -77,8 +77,9 @@ public class TradeController {
         }
 
         status.put("balance", balance);
-        status.put("profitPercent", tradeService.calculateAllProfitPercent());
+        status.put("calculatedPercent", tradeService.calculateAllProfitPercent());
         status.put("todayProfitUSDT", tradeService.calculateTodayProfitUSDT());
+        status.put("todayProfitPercent", tradeService.calculateTodayProfitPercent());
         status.put("balanceHistory", balanceHistoryRepository.findAll());
         status.put("history", allTrades);
 
@@ -195,7 +196,9 @@ public class TradeController {
             settings.setTradePercent(tradePercent);
             settingsRepository.save(settings);
 
-            System.out.println("✅ Настройки успешно обновлены: " + tradePercent + "%");
+            System.out.println("✅ Настройки успешно обновлены: \n" +
+                    "Список доступных для торговли активов: " + assets + "\n" +
+                    "Процент торговых сделок от баланса: " + tradePercent + "%");
             return ResponseEntity.ok().body(Map.of("status", "success"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Ошибка: " + e.getMessage());

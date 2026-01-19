@@ -10,7 +10,7 @@ class SettingsManager {
         }
     }
 
-        // 1. НАСТРОЙКИ БОТА
+    // 1. НАСТРОЙКИ БОТА
     async init() {
 
         try {
@@ -51,7 +51,10 @@ class SettingsManager {
         try {
             const response = await window.api.clearHistory();
             if (response.ok) {
-                location.reload(); // Перезагружаем, чтобы обновить состояние
+                const historyContainer = document.getElementById('history-table-body');
+                if (historyContainer) historyContainer.innerHTML = '';
+
+                if (window.ui) window.ui.showSuccess();
             }
         } catch (err) {
             console.error("Ошибка очистки:", err);

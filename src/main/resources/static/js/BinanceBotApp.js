@@ -26,7 +26,7 @@ class BinanceBotApp {
         if (selector) selector.onchange = (e) => this.changeView(e.target.value);
 
         await this.updateDashboard();
-        setInterval(() => this.updateDashboard(), 2000);
+        setInterval(_.debounce(() => this.updateDashboard(), 2000, { leading: true }), 2000);
     }
 
     changeView(val) {
@@ -84,14 +84,15 @@ class BinanceBotApp {
 
             // 4. Профит за сегодня
             const todayProfit = Number(data.todayProfitUSDT || 0).toFixed(2);
-            const todayPercent = todayProfit > 0 ? (todayProfit / currentBalance * 100).toFixed(2) : 0;
+            const todayPercent = data.todayProfitPercent ? Number(data.todayProfitPercent).toFixed(2) : 0; //
 
             // 5. Общий прирост
-            const initialDeposit = data.balance;
-            const calculatedPercent = ((currentBalance - initialDeposit) / initialDeposit * 100).toFixed(2);
+            const calculatedPercent = data.calculatedPercent || 0;
 
-            // 6. PnL активных сделок (расчёт нереализованной прибыли)
+            // 6. PnL активных сделок
             let totalUnrealizedPnL = 0;
+            let totalActiveVolume = 0; // Добавляем переменную для суммы входов
+
             this.state.fullHistory
                 .filter(t => t.status === 'OPEN')
                 .forEach(trade => {
@@ -99,18 +100,20 @@ class BinanceBotApp {
                     if (currentPrice > 0 && trade.entryPrice > 0) {
                         let pnlPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
                         if (trade.type === 'SHORT') pnlPercent *= -1;
-                        totalUnrealizedPnL += trade.volume * ((pnlPercent - 0.2) / 100); // -0.2% комиссия
+
+                        totalUnrealizedPnL += trade.volume * ((pnlPercent - 0.2) / 100);
+                        totalActiveVolume += Number(trade.volume); // Суммируем объем всех сделок
                     }
                 });
 
-            // 7. Обновляем UI (передаём все нужные данные)
+            // 7. Обновляем UI
             this.ui.updateHeaderStats({
                 balance: currentBalance,
                 inTrade: inTrade,
                 todayProfit: todayProfit,
                 todayPercent: todayPercent,
                 totalPnl: totalUnrealizedPnL.toFixed(2),
-                totalPnlPercent: currentBalance > 0 ? (totalUnrealizedPnL / currentBalance * 100).toFixed(2) : 0,
+                totalPnlPercent: totalActiveVolume > 0 ? (totalUnrealizedPnL / totalActiveVolume * 100).toFixed(2) : 0,
                 calculatedPercent: calculatedPercent
             });
 

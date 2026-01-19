@@ -16,7 +16,7 @@ public class TelegramAPI {
      * @see #sendMessageWithInlineButton(String, String, String) - Отправка сообщения с кнопкой действия
      * @see #deleteMessageWithInlineButton() - Метод для удаления сообщений с кнопками действия
      * @see #sendConfirmationButtons(String, String, String, String, String) - Форма подтверждения действия (Да/нет)
-     * @see #deleteMessageWithConfirmationButtons() - Метод для удаления сообщения формы подтверждения
+     * @see #deleteMessageWithConfirmationButtons() - Метод для удаления сообщения с формой подтверждения
      * @see #getLatestCallbackData() - Получает последние данные обратного вызова (callback_data) от кнопки.
      * @see #sendRequest(String, Map, boolean) - Универсальный вспомогательный метод для отправки POST-запросов к Telegram Bot API.
      */
@@ -26,7 +26,7 @@ public class TelegramAPI {
     private long lastUpdateId = 0;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private final List<Integer> activeMenuMessageIds = new ArrayList<>();
+    private final List<Integer> activeMenuMessageIds = Collections.synchronizedList(new ArrayList<>());
     private Integer confirmationMessageId;
     private String latestCallbackData;
 
@@ -104,36 +104,43 @@ public class TelegramAPI {
      */
     public String getLatestMessage() {
         try {
-            String url = API_URL + "/getUpdates?offset=" + (lastUpdateId + 1) + "&limit=1&timeout=5";
-            Map<?, ?> response = restTemplate.getForObject(url, Map.class);
-            if (response == null || !response.containsKey("result")) return null;
+            // timeout=0 чтобы не блокировать потоки!
+            String url = API_URL + "/getUpdates?offset=" + (lastUpdateId + 1) + "&timeout=0";
+            Map response = restTemplate.getForObject(url, Map.class);
 
-            List<Map<String, Object>> result = (List<Map<String, Object>>) response.get("result");
-            if (result.isEmpty()) return null;
+            if (response == null || response.get("result") == null) return null;
 
-            Map<String, Object> update = result.get(0);
-            this.lastUpdateId = Long.parseLong(update.get("update_id").toString());
+            List<Object> updates = (List<Object>) response.get("result");
+            String textToReturn = null;
 
-            if (update.containsKey("callback_query")) {
-                Map<String, Object> cb = (Map<String, Object>) update.get("callback_query");
-                this.latestCallbackData = cb.get("data").toString();
+            for (Object updateObj : updates) {
+                Map<String, Object> update = (Map<String, Object>) updateObj;
+                this.lastUpdateId = Long.parseLong(update.get("update_id").toString());
 
-                restTemplate.getForObject(API_URL + "/answerCallbackQuery?callback_query_id=" + cb.get("id"), String.class);
-                return null;
+                // Обработка КНОПОК
+                if (update.containsKey("callback_query")) {
+                    Map<String, Object> cb = (Map<String, Object>) update.get("callback_query");
+                    this.latestCallbackData = cb.get("data").toString();
+                    System.out.println(">>> [DEBUG] Callback пойман: " + latestCallbackData);
+                }
+
+                // Обработка СООБЩЕНИЙ
+                if (update.containsKey("message")) {
+                    Map<String, Object> msg = (Map<String, Object>) update.get("message");
+                    if (msg.containsKey("text")) {
+                        textToReturn = msg.get("text").toString();
+                    }
+                }
             }
-
-            if (update.containsKey("message")) {
-                Map<String, Object> msg = (Map<String, Object>) update.get("message");
-                return msg.get("text") != null ? msg.get("text").toString() : null;
-            }
+            return textToReturn;
         } catch (Exception e) {
-            System.err.println("Ошибка связи с ТГ: " + e.getMessage());
+            System.err.println(">>> [CRITICAL] Ошибка API: " + e.getMessage());
+            return null;
         }
-        return null;
     }
 
     /**
-     * Метод для удаления сообщения формы подтверждения
+     * Метод для удаления сообщения с формой подтверждения
      */
     public void deleteMessageWithConfirmationButtons() {
         if (confirmationMessageId != null) {

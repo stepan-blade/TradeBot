@@ -17,26 +17,35 @@ import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class TradeService {
 
     /**
      * @see #openPosition(String, double, double) - покупка актива
+     *
      * @see #closePosition(Trade, double, String) - продажа актива
+     * @see #closeSpecificTradeManually(String) - Досрочное закрытие активной позиции в ручном режиме
+     * @see #closeAllPositionsManually() - Досрочное закрытие всех активных позиции в ручном режиме
+     *
      * @see #getActiveTrades() - Список активных сделок
      * @see #getTotalFeePercent(String) - Вспомогательный метод для расчета итоговый комиссии торговой площадки в процентах
+     * @see #getCoolDownMap() - Список активов в листе ожидания
+     * @see #getOccupiedBalance() - Сумма USDT в активных сделках
+     * @see #getTotalEquity() - Свободные USDT + Стоимость всех открытых позиций
+     *
      * @see #calculateTodayProfitUSDT() - Расчет показателя общей доходности за текущий день в USDT
-     * @see #calculateTodayProfitPercent() - Расчет показателя общей доходности за текущий день в %
      * @see #calculateAllProfitPercent() - Расчет показателя общей доходности в %
      * @see #calculateActiveProfitPercent(Trade, double) - Расчет показателя доходности текущей сделки в %
      * @see #calculateNetResultPercent(double, double, String, String) -  Единый метод расчета чистой прибыли с учетом комиссий Binance.
-     * @see #closeSpecificTradeManually(String) - Досрочное закрытие активной позиции в ручном режиме
-     * @see #closeAllPositionsManually() - Досрочное закрытие всех активных позиции в ручном режиме
-     * @see #getCoolDownMap() - Список активов в листе ожидания
-     * @see #getOccupiedBalance() - Сумма USDT в активных сделках
+     *
      * @see #isCoolDown(String) - Проверка актива во временном стоп-листе
+
      */
 
     private final BinanceAPI binanceAPI;
@@ -45,7 +54,9 @@ public class TradeService {
     private final BalanceHistoryRepository balanceHistoryRepository;
     private final TradeRepository tradeRepository;
     private double usdtBalance;
-    private final Map<String, LocalDateTime> coolDownMap = new HashMap<>();
+    private final Map<String, LocalDateTime> coolDownMap = new ConcurrentHashMap<>();
+
+    private static final Logger logger = LoggerFactory.getLogger(TradeService.class);
 
     @Value("${binance.cooldown.minutes:5}")
     private int cooldownMinutes;
@@ -71,8 +82,13 @@ public class TradeService {
     }
 
     public double getBalance() {
-        this.usdtBalance = binanceAPI.getAccountBalance();
-        return usdtBalance;
+        try {
+            this.usdtBalance = binanceAPI.getAccountBalance();
+            return usdtBalance;
+        } catch (Exception e) {
+            System.err.println("Ошибка получения баланса: " + e.getMessage());
+            return 0.0;
+        }
     }
 
     /**
@@ -82,23 +98,56 @@ public class TradeService {
      * @param percent Процент от свободного баланса
      */
     public void openPosition(String symbol, double price, double percent) {
-        double desiredUsdt = usdtBalance * (percent / 100.0);
-        double buyUsdt = Math.min(desiredUsdt, usdtBalance);
-        if (buyUsdt < 10.0) return;
+        double buyUsdt = Math.min(usdtBalance * (percent / 100.0), usdtBalance);
+        if (buyUsdt < 5.0) return;
 
-        double quantity = buyUsdt / price;
+        // 1. Получаем правила округления от биржи
+        double stepSize = binanceAPI.getStepSize(symbol);
 
-        String orderId = binanceAPI.placeMarketBuy(symbol, quantity);
+        // 2. Рассчитываем и СТРОГО округляем количество
+        double rawQuantity = buyUsdt / price;
+        double quantity = FormatterUtil.roundToStep(rawQuantity, stepSize);
 
-        if (orderId == null) {
-            telegramAPI.sendMessage("❌ Ошибка покупки " + symbol);
+        // 3. Попытка покупки
+        String orderId = null;
+        try {
+            orderId = binanceAPI.placeMarketBuy(symbol, quantity);
+        } catch (Exception e) {
+            telegramAPI.sendMessage("❌ Ошибка покупки " + symbol + ": " + e.getMessage());
             return;
         }
 
+        if (orderId == null) return;
+
+        // 4. Попытка установки защиты (Stop Loss)
+        try {
+            double stopPrice = price * 0.98;
+            double limitPrice = stopPrice * 0.995;
+
+            binanceAPI.placeStopLossLimit(symbol, quantity, stopPrice, limitPrice);
+
+        } catch (Exception e) {
+            telegramAPI.sendMessage(
+                    "⚠️ ВНИМАНИЕ! Откат сделки " + symbol +
+                    "\nНе удалось поставить StopLoss: " + e.getMessage()
+            );
+            try {
+                binanceAPI.placeMarketSell(symbol, quantity);
+            } catch (Exception sellEx) {
+                telegramAPI.sendMessage("🆘 SOS! Не удалось продать актив обратно! Ручное вмешательство: " + symbol);
+            }
+            return;
+        }
+
+        logger.info("Открытие сделки: {}", symbol);
+        logger.info("✅ Куплено монеты {}: {}", symbol, quantity);
+
         String startTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm"));
-        Trade trade = new Trade(startTime, symbol, "BUY", price, buyUsdt, quantity);
+        Trade trade = new Trade(startTime, symbol, "LONG", price, buyUsdt, quantity);
+        trade.setStatus("OPEN");
         trade.setStopLoss(price * 0.98);
         trade.setBestPrice(price);
+        trade.setQuantity(quantity);
         tradeRepository.save(trade);
 
         telegramAPI.sendMessage("🚀 ПОКУПКА\n" +
@@ -116,14 +165,28 @@ public class TradeService {
      */
     public void closePosition(Trade trade, double currentPrice, String reason) {
         double quantity = trade.getQuantity();
-        if (quantity <= 0) return;
 
-        // 1. Выполняем продажу на бирже
-        String orderId = binanceAPI.placeMarketSell(trade.getAsset(), quantity);
-        if (orderId == null) {
-            telegramAPI.sendMessage("❌ Ошибка продажи: " + trade.getAsset());
+        // ЗАЩИТА: Если в базе 0, пробуем взять реальный баланс с биржи
+        if (quantity <= 0) {
+            logger.warn("⚠️ В базе данных quantity=0 для {}. Запрашиваю баланс с биржи...", trade.getAsset());
+            quantity = binanceAPI.getAssetBalance(trade.getAsset());
+            trade.setQuantity(quantity); // Сразу обновляем объект
+        }
+
+        if (quantity <= 0) {
+            logger.error("❌ Не удалось закрыть сделку {}: Баланс на бирже тоже 0", trade.getAsset());
             return;
         }
+
+        // 1. Выполняем продажу на бирже
+        String orderId = null;
+        try {
+            orderId = binanceAPI.placeMarketSell(trade.getAsset(), quantity);
+        } catch (Exception e) {
+            telegramAPI.sendMessage("❌ Ошибка продажи " + trade.getAsset() + ": " + e.getMessage());
+            return;
+        }
+        logger.info("Закрытие сделки: {}", trade.getAsset());
 
         // 2. Рассчитываем финансовый результат через единый метод
         double netProfitPercent = calculateNetResultPercent(trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType());
@@ -154,6 +217,55 @@ public class TradeService {
         telegramAPI.sendMessage(message);
     }
 
+    /**
+     * Синхронизация статусов.
+     * Проверяет, остались ли монеты на балансе. Если нет — закрывает сделку в БД.
+     */
+    public void syncTradesWithExchange() {
+        List<Trade> activeTrades = getActiveTrades();
+
+        for (Trade trade : activeTrades) {
+            // 1. Спрашиваем у Binance реальный баланс монеты
+            double actualBalance = binanceAPI.getAssetBalance(trade.getAsset());
+
+            // 2. Считаем порог "пыли" (остатков).
+            double dustThreshold = trade.getQuantity() * 0.05;
+
+            if (actualBalance < dustThreshold) {
+                logger.info("📉 Обнаружено закрытие сделки на бирже: " + trade.getAsset());
+
+                // 3. Фиксируем закрытие
+                double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
+
+                closePositionInDB(trade, currentPrice, "⚖️ Exchange Stop/TP Triggered");
+            }
+        }
+    }
+
+    /**
+     * Внутренний метод для закрытия сделки ТОЛЬКО в базе (без отправки ордера)
+     */
+    private void closePositionInDB(Trade trade, double exitPrice, String reason) {
+        // Расчет прибыли
+        double netProfitPercent = calculateNetResultPercent(trade.getEntryPrice(), exitPrice, trade.getAsset(), trade.getType());
+        double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
+
+        // Обновляем баланс USDT в боте
+        this.usdtBalance = binanceAPI.getAccountBalance(); // Обновляем общий кеш USDT
+
+        // Сохраняем историю
+        trade.setExitTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm")));
+        trade.setExitPrice(exitPrice);
+        trade.setProfit(profitUsdt);
+        trade.setStatus("CLOSED"); // Закрываем статус
+        tradeRepository.save(trade);
+
+        // Ставим кулдаун
+        coolDownMap.put(trade.getAsset(), LocalDateTime.now().plusMinutes(cooldownMinutes));
+
+        telegramAPI.sendMessage(String.format("🔔 Синхронизация: Сделка %s закрыта биржей (%s).\nИтог: %.2f$ (%.2f%%)",
+                trade.getAsset(), reason, profitUsdt, netProfitPercent));
+    }
 
     /**
      * Досрочное закрытие всех активных позиции в ручном режиме
@@ -233,10 +345,31 @@ public class TradeService {
      */
     public double calculateTodayProfitPercent() {
         double todayProfitUSDT = calculateTodayProfitUSDT();
-        double currentBalance = binanceAPI.getAccountBalance();
-        double startBalanceToday = currentBalance - todayProfitUSDT;
-        if (startBalanceToday <= 0) return 0.0;
-        return (todayProfitUSDT / startBalanceToday) * 100;
+        double currentEquity = getTotalEquity();
+        double startEquityToday = currentEquity - todayProfitUSDT;
+
+        if (Math.abs(todayProfitUSDT) < 0.0001 || startEquityToday < 1.0) {
+            return 0.0;
+        }
+
+        double percent = (todayProfitUSDT / startEquityToday) * 100.0;
+
+        return Math.round(percent * 100.0) / 100.0;
+    }
+
+    /**
+     * Свободные USDT + Стоимость всех открытых позиций
+     * @return
+     */
+    public double getTotalEquity() {
+        double freeUsdt = getBalance();
+        double lockedInTrades = getActiveTrades().stream()
+                .mapToDouble(trade -> {
+                    double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
+                    return trade.getQuantity() * currentPrice;
+                })
+                .sum();
+        return freeUsdt + lockedInTrades;
     }
 
     /**
@@ -245,11 +378,21 @@ public class TradeService {
      */
     public double calculateAllProfitPercent() {
         BotSettings botSettings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(null);
-        if (botSettings == null) return 0.0;
+        if (botSettings == null || botSettings.getBalance() <= 0) return 0.0;
 
         double initialBalance = botSettings.getBalance();
-        double diff = binanceAPI.getAccountBalance() - initialBalance;
-        return Math.round((diff / initialBalance) * 10000.0) / 100.0;
+        double currentTotalEquity = getTotalEquity();
+
+        double diff = currentTotalEquity - initialBalance;
+        double result = (diff / initialBalance) * 100.0;
+
+        // Лог поможет понять, почему получается ноль
+        logger.info("Расчет общего PnL: Equity={}, Start={}, Diff={}",
+                String.format("%.2f", currentTotalEquity),
+                String.format("%.2f", initialBalance),
+                String.format("%.4f", diff));
+
+        return Math.round(result * 100.0) / 100.0;
     }
 
     /**

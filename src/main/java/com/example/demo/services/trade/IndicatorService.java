@@ -1,7 +1,10 @@
 package com.example.demo.services.trade;
 
+import org.springframework.stereotype.Service;
+
 import java.util.List;
 
+@Service
 public class IndicatorService {
 
     /**

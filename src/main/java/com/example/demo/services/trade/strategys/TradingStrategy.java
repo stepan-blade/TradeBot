@@ -1,4 +1,4 @@
-package com.example.demo.services.trade.strategys.test;
+package com.example.demo.services.trade.strategys;
 
 import com.example.demo.data.BotSettings;
 import com.example.demo.interfaces.BotSettingsRepository;
@@ -6,9 +6,11 @@ import com.example.demo.services.api.BinanceAPI;
 import com.example.demo.services.trade.IndicatorService;
 import com.example.demo.services.trade.TradeService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Service
 public class TradingStrategy {
 
     private final BinanceAPI binanceAPI;
@@ -48,7 +50,7 @@ public class TradingStrategy {
 
         BotSettings settings = botSettingsRepository.findById("MAIN_SETTINGS").orElseThrow();
         double tradePercent = settings.getTradePercent();
-        if (currentPrice > sma200 && rsi < 35 && currentPrice <= bb[2]) {
+        if (currentPrice > sma200 && rsi < 35 && currentPrice <= bb[2] && tradeService.getBalance() >= 5) {
             tradeService.openPosition(symbol, currentPrice, tradePercent);
         }
     }
