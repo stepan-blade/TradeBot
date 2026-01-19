@@ -3,6 +3,7 @@ package com.example.demo.services.trade.strategys;
 import com.example.demo.data.Trade;
 import com.example.demo.interfaces.TradeRepository;
 import com.example.demo.services.api.BinanceAPI;
+import com.example.demo.services.trade.CalculatorService;
 import com.example.demo.services.trade.IndicatorService;
 import com.example.demo.services.trade.TradeService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,13 +14,15 @@ public class PositionManager {
 
     private final BinanceAPI binanceAPI;
     private final TradeService tradeService;
+    private final CalculatorService calculatorService;
     private final IndicatorService indicatorService;
     private final TradeRepository tradeRepository;
 
     @Autowired
-    public PositionManager(BinanceAPI binanceAPI, TradeService tradeService, IndicatorService indicatorService, TradeRepository tradeRepository) {
+    public PositionManager(BinanceAPI binanceAPI, TradeService tradeService, IndicatorService indicatorService, CalculatorService calculatorService, TradeRepository tradeRepository) {
         this.binanceAPI = binanceAPI;
         this.tradeService = tradeService;
+        this.calculatorService = calculatorService;
         this.indicatorService = indicatorService;
         this.tradeRepository = tradeRepository;
     }
@@ -36,16 +39,16 @@ public class PositionManager {
      */
     public void handleTradeStop(Trade trade, double currentPrice) {
         // Используем единый метод для оценки РЕАЛЬНОГО профита в сделке прямо сейчас
-        double netProfit = tradeService.calculateNetResultPercent(
+        double netProfit = calculatorService.getNetResultPercent(
                 trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType()
         );
 
-//        // Выход по RSI (минутный таймфрейм)
-//        double rsi = indicatorService.calculateRSI(binanceAPI.getKlines(trade.getAsset(), "1m", 15), 14);
-//        if (rsi > 75) {
-//            tradeService.closePosition(trade, currentPrice, "💰 RSI Overbought Exit");
-//            return;
-//        }
+        // Выход по RSI (минутный таймфрейм)
+        double rsi = indicatorService.calculateRSI(binanceAPI.getKlines(trade.getAsset(), "1m", 15), 14);
+        if (rsi > 75) {
+            tradeService.closePosition(trade, currentPrice, "💰 RSI Overbought Exit");
+            return;
+        }
 
         // Хард тейк-профит сравнивается с ЧИСТОЙ прибылью
         if (netProfit >= 2.5) {

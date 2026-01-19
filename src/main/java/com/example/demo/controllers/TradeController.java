@@ -6,6 +6,7 @@ import com.example.demo.interfaces.BalanceHistoryRepository;
 import com.example.demo.interfaces.BotSettingsRepository;
 import com.example.demo.interfaces.TradeRepository;
 import com.example.demo.services.api.BinanceAPI;
+import com.example.demo.services.trade.CalculatorService;
 import com.example.demo.services.trade.TradeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -35,17 +36,19 @@ public class TradeController {
 
     private final BinanceAPI binanceAPI;
     private final TradeService tradeService;
+    private final CalculatorService calculatorService;
     private final TradeRepository tradeRepository;
     private final BotSettingsRepository settingsRepository;
     private final BalanceHistoryRepository balanceHistoryRepository;
 
     @Autowired
-    public TradeController(BinanceAPI binanceAPI, TradeService tradeService, TradeRepository tradeRepository, BotSettingsRepository settingsRepository, BalanceHistoryRepository balanceHistoryRepository) {
+    public TradeController(BinanceAPI binanceAPI, TradeService tradeService, TradeRepository tradeRepository, BotSettingsRepository settingsRepository, BalanceHistoryRepository balanceHistoryRepository, CalculatorService calculatorService) {
         this.binanceAPI = binanceAPI;
         this.tradeService = tradeService;
         this.tradeRepository = tradeRepository;
         this.settingsRepository = settingsRepository;
         this.balanceHistoryRepository = balanceHistoryRepository;
+        this.calculatorService = calculatorService;
     }
 
     /**
@@ -70,16 +73,22 @@ public class TradeController {
         for (Trade trade : allTrades) {
             if ("OPEN".equals(trade.getStatus())) {
                 double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
-                if (currentPrice > 0) {
-                    trade.setExitPrice(currentPrice);
-                }
+                if (currentPrice > 0) trade.setExitPrice(currentPrice);
             }
         }
 
         status.put("balance", balance);
-        status.put("calculatedPercent", tradeService.calculateAllProfitPercent());
-        status.put("todayProfitUSDT", tradeService.calculateTodayProfitUSDT());
-        status.put("todayProfitPercent", tradeService.calculateTodayProfitPercent());
+        status.put("occupiedBalance", calculatorService.getOccupiedBalance());
+        status.put("totalEquity", calculatorService.getTotalEquity());
+
+        status.put("todayProfitUSDT", calculatorService.getTodayProfitUSDT());
+        status.put("todayProfitPercent", calculatorService.getTodayProfitPercent());
+
+        status.put("allProfitPercent", calculatorService.getAllProfitPercent());
+
+        status.put("unrealizedPnLUsdt", calculatorService.getUnrealizedPnLUsdt()); // грязный для таблицы
+        status.put("unrealizedPnLUsdtWithFee", calculatorService.getUnrealizedPnLUsdtWithFee()); // чистый для общей статистики
+
         status.put("balanceHistory", balanceHistoryRepository.findAll());
         status.put("history", allTrades);
 
@@ -225,15 +234,18 @@ public class TradeController {
             Trade trade = tradeOpt.get();
             double currentPrice = binanceAPI.getCurrentPrice(symbol);
 
-            double netProfitPercent = tradeService.calculateNetResultPercent(
+            double netProfitPercent = calculatorService.getNetResultPercent(
                     trade.getEntryPrice(), currentPrice, symbol, trade.getType()
             );
             double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
+
+            double feePercent = calculatorService.getTotalFeePercent(symbol); // Новая строка
 
             Map<String, Object> response = new HashMap<>();
             response.put("profitUsdt", Math.round(profitUsdt * 100.0) / 100.0);
             response.put("percent", Math.round(netProfitPercent * 100.0) / 100.0);
             response.put("currentPrice", currentPrice);
+            response.put("feePercent", feePercent); // Добавляем
 
             return ResponseEntity.ok(response);
         }

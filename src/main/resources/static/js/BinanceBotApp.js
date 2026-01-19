@@ -5,7 +5,7 @@ class BinanceBotApp {
             currentView: 'OPEN',
             currentPage: 1,
             itemsPerPage: 10,
-            filters: { asset: 'ALL', type: 'ALL', result: 'ALL' }
+            filters: {asset: 'ALL', type: 'ALL', result: 'ALL'}
         };
 
         this.api = new ApiService();
@@ -26,7 +26,7 @@ class BinanceBotApp {
         if (selector) selector.onchange = (e) => this.changeView(e.target.value);
 
         await this.updateDashboard();
-        setInterval(_.debounce(() => this.updateDashboard(), 2000, { leading: true }), 2000);
+        setInterval(_.debounce(() => this.updateDashboard(), 2000, {leading: true}), 2000);
     }
 
     changeView(val) {
@@ -68,65 +68,25 @@ class BinanceBotApp {
     // ГЛАВНЫЙ МЕТОД UPDATE DASHBOARD
     async updateDashboard() {
         try {
-            // 1. Cooldowns
-            const cooldowns = await this.api.fetchCooldowns();
-            this.ui.renderCooldowns(cooldowns);
-
-            // 2. Основные данные статуса (баланс, профит, история)
             const data = await this.api.fetchStatus();
             this.state.fullHistory = data.history || [];
 
-            // 3. Реальный баланс и метрики
-            const currentBalance = Number(data.balance || 0);
-            const inTrade = this.state.fullHistory
-                .filter(t => t.status === 'OPEN')
-                .reduce((sum, t) => sum + (Number(t.volume) || 0), 0).toFixed(2);
-
-            // 4. Профит за сегодня
-            const todayProfit = Number(data.todayProfitUSDT || 0).toFixed(2);
-            const todayPercent = data.todayProfitPercent ? Number(data.todayProfitPercent).toFixed(2) : 0; //
-
-            // 5. Общий прирост
-            const calculatedPercent = data.calculatedPercent || 0;
-
-            // 6. PnL активных сделок
-            let totalUnrealizedPnL = 0;
-            let totalActiveVolume = 0; // Добавляем переменную для суммы входов
-
-            this.state.fullHistory
-                .filter(t => t.status === 'OPEN')
-                .forEach(trade => {
-                    const currentPrice = trade.exitPrice || trade.entryPrice || 0;
-                    if (currentPrice > 0 && trade.entryPrice > 0) {
-                        let pnlPercent = ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
-                        if (trade.type === 'SHORT') pnlPercent *= -1;
-
-                        totalUnrealizedPnL += trade.volume * ((pnlPercent - 0.2) / 100);
-                        totalActiveVolume += Number(trade.volume); // Суммируем объем всех сделок
-                    }
-                });
-
-            // 7. Обновляем UI
             this.ui.updateHeaderStats({
-                balance: currentBalance,
-                inTrade: inTrade,
-                todayProfit: todayProfit,
-                todayPercent: todayPercent,
-                totalPnl: totalUnrealizedPnL.toFixed(2),
-                totalPnlPercent: totalActiveVolume > 0 ? (totalUnrealizedPnL / totalActiveVolume * 100).toFixed(2) : 0,
-                calculatedPercent: calculatedPercent
+                balance: Number(data.balance || 0).toFixed(6),
+                inTrade: Number(data.occupiedBalance || 0).toFixed(2),
+                todayProfit: Number(data.todayProfitUSDT || 0).toFixed(2),
+                todayPercent: Number(data.todayProfitPercent || 0).toFixed(2),
+                totalPnl: Number(data.unrealizedPnLUsdt || 0).toFixed(2), // грязный
+                totalPnlPercent: data.occupiedBalance > 0
+                    ? ((data.unrealizedPnLUsdt / data.occupiedBalance) * 100).toFixed(2)
+                    : 0,
+                calculatedPercent: Number(data.allProfitPercent || 0).toFixed(2)
             });
 
-            // 8. График доходности (если balanceHistory приходит)
-            if (data.balanceHistory && Array.isArray(data.balanceHistory)) {
-                this.chart.update(data.balanceHistory);
-            }
-
-            // 9. Таблица сделок
+            if (data.balanceHistory) this.chart.update(data.balanceHistory);
             this.table.render(this.state.fullHistory);
-
         } catch (error) {
-            console.error("Ошибка обновления дашборда:", error);
+            console.error("Ошибка:", error);
         }
     }
 
@@ -140,7 +100,7 @@ class BinanceBotApp {
             const confirmMsg = `Закрыть позицию ${symbol}?\n\n` +
                 `Текущая цена: ${data.currentPrice}\n` +
                 `Ожидаемый профит: ${profitText} $ (${data.percent}%)\n` +
-                `С учетом комиссии 0.2% ${emoji}`;
+                `С учетом комиссии ${data.feePercent}% ${emoji}`;
 
             if (confirm(confirmMsg)) {
                 await this.api.postCloseTrade(symbol);

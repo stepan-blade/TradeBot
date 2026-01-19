@@ -8,15 +8,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class TelegramBotTask {
 
+    private final TelegramService telegramService;
+
     @Autowired
-    private TelegramService telegramService;
+    public TelegramBotTask(TelegramService telegramService) {
+        this.telegramService = telegramService;
+    }
 
     @Scheduled(fixedDelay = 2000)
     public void telegramLoop() {
         try {
             telegramService.handleTelegramCommands();
         } catch (Exception e) {
-            System.err.println(">>> [ERROR] Ошибка в цикле: " + e.getMessage());
+            System.err.println(">>> [TELEGRAM ERROR] Ошибка в цикле: " + e.getMessage());
         }
     }
 }

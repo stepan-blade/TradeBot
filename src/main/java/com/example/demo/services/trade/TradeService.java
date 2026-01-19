@@ -8,7 +8,7 @@ import com.example.demo.interfaces.BotSettingsRepository;
 import com.example.demo.interfaces.TradeRepository;
 import com.example.demo.services.api.BinanceAPI;
 import com.example.demo.services.api.TelegramAPI;
-import com.example.demo.utils.FormatterUtil;
+import com.example.demo.utils.FormatUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -27,29 +27,24 @@ import org.slf4j.LoggerFactory;
 public class TradeService {
 
     /**
+     * @see #getBalance() - текущий остаток USDT на счете Binance
      * @see #openPosition(String, double, double) - покупка актива
      *
      * @see #closePosition(Trade, double, String) - продажа актива
+     * @see #closePositionInDB(Trade, double, String) - Внутренний метод для закрытия сделки ТОЛЬКО в базе (без отправки ордера)
      * @see #closeSpecificTradeManually(String) - Досрочное закрытие активной позиции в ручном режиме
      * @see #closeAllPositionsManually() - Досрочное закрытие всех активных позиции в ручном режиме
      *
      * @see #getActiveTrades() - Список активных сделок
-     * @see #getTotalFeePercent(String) - Вспомогательный метод для расчета итоговый комиссии торговой площадки в процентах
      * @see #getCoolDownMap() - Список активов в листе ожидания
-     * @see #getOccupiedBalance() - Сумма USDT в активных сделках
-     * @see #getTotalEquity() - Свободные USDT + Стоимость всех открытых позиций
      *
-     * @see #calculateTodayProfitUSDT() - Расчет показателя общей доходности за текущий день в USDT
-     * @see #calculateAllProfitPercent() - Расчет показателя общей доходности в %
-     * @see #calculateActiveProfitPercent(Trade, double) - Расчет показателя доходности текущей сделки в %
-     * @see #calculateNetResultPercent(double, double, String, String) -  Единый метод расчета чистой прибыли с учетом комиссий Binance.
-     *
+     * @see #syncTradesWithExchange() - Проверяет, остались ли монеты на балансе. Если нет — закрывает сделку в БД.
      * @see #isCoolDown(String) - Проверка актива во временном стоп-листе
-
      */
 
     private final BinanceAPI binanceAPI;
     private final TelegramAPI telegramAPI;
+    private final CalculatorService calculatorService;
     private final BotSettingsRepository botSettingsRepository;
     private final BalanceHistoryRepository balanceHistoryRepository;
     private final TradeRepository tradeRepository;
@@ -62,9 +57,12 @@ public class TradeService {
     private int cooldownMinutes;
 
     @Autowired
-    public TradeService(BinanceAPI binanceAPI, TelegramAPI telegramAPI, BotSettingsRepository botSettingsRepository, BalanceHistoryRepository balanceHistoryRepository, TradeRepository tradeRepository) {
+    public TradeService(BinanceAPI binanceAPI, TelegramAPI telegramAPI,
+                        CalculatorService calculatorService, BotSettingsRepository botSettingsRepository,
+                        BalanceHistoryRepository balanceHistoryRepository, TradeRepository tradeRepository) {
         this.binanceAPI = binanceAPI;
         this.telegramAPI = telegramAPI;
+        this.calculatorService = calculatorService;
         this.botSettingsRepository = botSettingsRepository;
         this.balanceHistoryRepository = balanceHistoryRepository;
         this.tradeRepository = tradeRepository;
@@ -81,6 +79,10 @@ public class TradeService {
         }
     }
 
+    /**
+     * Текущий остаток USDT на счете Binance
+     * @return Остаток USDT на счете Binance
+     */
     public double getBalance() {
         try {
             this.usdtBalance = binanceAPI.getAccountBalance();
@@ -106,7 +108,7 @@ public class TradeService {
 
         // 2. Рассчитываем и СТРОГО округляем количество
         double rawQuantity = buyUsdt / price;
-        double quantity = FormatterUtil.roundToStep(rawQuantity, stepSize);
+        double quantity = FormatUtil.roundToStep(rawQuantity, stepSize);
 
         // 3. Попытка покупки
         String orderId = null;
@@ -143,15 +145,21 @@ public class TradeService {
         logger.info("✅ Куплено монеты {}: {}", symbol, quantity);
 
         String startTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm"));
-        Trade trade = new Trade(startTime, symbol, "LONG", price, buyUsdt, quantity);
-        trade.setStatus("OPEN");
-        trade.setStopLoss(price * 0.98);
-        trade.setBestPrice(price);
-        trade.setQuantity(quantity);
+
+        Trade trade = new Trade(
+                symbol,
+                startTime,
+                price,
+                "LONG",
+                buyUsdt,
+                quantity,
+                price * 0.98
+        );
+
         tradeRepository.save(trade);
 
         telegramAPI.sendMessage("🚀 ПОКУПКА\n" +
-                "Актив: " + FormatterUtil.formatSymbol(symbol) + "\n" +
+                "Актив: " + FormatUtil.formatSymbol(symbol) + "\n" +
                 "Сумма: " + String.format("%.2f", buyUsdt) + " USDT\n" +
                 "Количество: " + String.format("%.6f", quantity) + "\n" +
                 "Остаток USDT: " + String.format("%.2f", usdtBalance - buyUsdt));
@@ -189,7 +197,7 @@ public class TradeService {
         logger.info("Закрытие сделки: {}", trade.getAsset());
 
         // 2. Рассчитываем финансовый результат через единый метод
-        double netProfitPercent = calculateNetResultPercent(trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType());
+        double netProfitPercent = calculatorService.getNetResultPercent(trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType());
         double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
 
         // 3. Обновляем баланс СТРОГО после завершения сделки на бирже
@@ -212,7 +220,7 @@ public class TradeService {
 
         // 6. Уведомление Telegram
         String message = String.format("%s\nАктив: %s\nИтог: %s%.2f USDT (%.2f%%)",
-                reason, FormatterUtil.formatSymbol(trade.getAsset()),
+                reason, FormatUtil.formatSymbol(trade.getAsset()),
                 (profitUsdt >= 0 ? "+" : ""), profitUsdt, netProfitPercent);
         telegramAPI.sendMessage(message);
     }
@@ -247,7 +255,7 @@ public class TradeService {
      */
     private void closePositionInDB(Trade trade, double exitPrice, String reason) {
         // Расчет прибыли
-        double netProfitPercent = calculateNetResultPercent(trade.getEntryPrice(), exitPrice, trade.getAsset(), trade.getType());
+        double netProfitPercent = calculatorService.getNetResultPercent(trade.getEntryPrice(), exitPrice, trade.getAsset(), trade.getType());
         double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
 
         // Обновляем баланс USDT в боте
@@ -299,134 +307,6 @@ public class TradeService {
     }
 
     /**
-     * Единый метод расчета чистой прибыли с учетом комиссий Binance.
-     * @param entryPrice Цена входа
-     * @param exitPrice  Цена выхода (или текущая)
-     * @param symbol     Символ (для получения комиссии)
-     * @param type       Тип сделки (BUY/SHORT)
-     * @return Объекта с данными: [0] - чистый профит в %, [1] - чистый профит в USDT (если передан объем)
-     */
-    public double calculateNetResultPercent(double entryPrice, double exitPrice, String symbol, String type) {
-        if (entryPrice <= 0 || exitPrice <= 0) return 0.0;
-
-        // 1. Получаем комиссию (обычно 0.001 для тейкера)
-        double[] fees = binanceAPI.getTradeFee(symbol);
-        double takerFeePercent = fees[1] * 100; // Конвертируем в % (0.1%)
-        double totalFeePercent = takerFeePercent * 2; // Покупка + Продажа
-
-        // 2. Считаем разницу цены в %
-        double priceDiffPercent = ((exitPrice - entryPrice) / entryPrice) * 100;
-
-        // Если это SHORT, профит идет при падении цены
-        if ("SHORT".equals(type)) {
-            priceDiffPercent *= -1;
-        }
-
-        // 3. Итог: Грязный профит - Суммарная комиссия
-        return priceDiffPercent - totalFeePercent;
-    }
-
-    /**
-     * Расчет показателя общей доходности за текущий день в USDT
-     * @return USDT доходности за день
-     */
-    public double calculateTodayProfitUSDT() {
-        String todayPrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
-        return tradeRepository.findAll().stream()
-                .filter(t -> "CLOSED".equals(t.getStatus()))
-                .filter(t -> t.getExitTime() != null && t.getExitTime().startsWith(todayPrefix))
-                .mapToDouble(Trade::getProfit)
-                .sum();
-    }
-
-    /**
-     * Расчет показателя общей доходности за текущий день в %
-     * @return % доходности за день
-     */
-    public double calculateTodayProfitPercent() {
-        double todayProfitUSDT = calculateTodayProfitUSDT();
-        double currentEquity = getTotalEquity();
-        double startEquityToday = currentEquity - todayProfitUSDT;
-
-        if (Math.abs(todayProfitUSDT) < 0.0001 || startEquityToday < 1.0) {
-            return 0.0;
-        }
-
-        double percent = (todayProfitUSDT / startEquityToday) * 100.0;
-
-        return Math.round(percent * 100.0) / 100.0;
-    }
-
-    /**
-     * Свободные USDT + Стоимость всех открытых позиций
-     * @return
-     */
-    public double getTotalEquity() {
-        double freeUsdt = getBalance();
-        double lockedInTrades = getActiveTrades().stream()
-                .mapToDouble(trade -> {
-                    double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
-                    return trade.getQuantity() * currentPrice;
-                })
-                .sum();
-        return freeUsdt + lockedInTrades;
-    }
-
-    /**
-     * Расчет показателя общей доходности в %
-     * @return общий % доходности
-     */
-    public double calculateAllProfitPercent() {
-        BotSettings botSettings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(null);
-        if (botSettings == null || botSettings.getBalance() <= 0) return 0.0;
-
-        double initialBalance = botSettings.getBalance();
-        double currentTotalEquity = getTotalEquity();
-
-        double diff = currentTotalEquity - initialBalance;
-        double result = (diff / initialBalance) * 100.0;
-
-        // Лог поможет понять, почему получается ноль
-        logger.info("Расчет общего PnL: Equity={}, Start={}, Diff={}",
-                String.format("%.2f", currentTotalEquity),
-                String.format("%.2f", initialBalance),
-                String.format("%.4f", diff));
-
-        return Math.round(result * 100.0) / 100.0;
-    }
-
-    /**
-     * Расчет показателя доходности текущей сделки в %
-     * @param trade Активная сделка
-     * @param currentPrice Текущая цена актива
-     * @return % доходности текущих сделок
-     */
-    public double calculateActiveProfitPercent(Trade trade, double currentPrice) {
-        return ((currentPrice - trade.getEntryPrice()) / trade.getEntryPrice()) * 100;
-    }
-
-    /**
-     * Сумма USDT в активных сделках
-     * @return USDT в активных сделках
-     */
-    public double getOccupiedBalance() {
-        return getActiveTrades().stream()
-                .mapToDouble(Trade::getVolume)
-                .sum();
-    }
-
-    /**
-     * Вспомогательный метод для расчета итоговый комиссии торговой площадки в процентах
-     * @param symbol Валютная пара
-     * @return %
-     */
-    public double getTotalFeePercent(String symbol) {
-        double[] fees = binanceAPI.getTradeFee(symbol);
-
-        return (fees[1] * 2) * 100;
-    }
-
-    /**
      * Список активов в стоп-листе
      * @return Список активов
      */
@@ -450,4 +330,3 @@ public class TradeService {
         return false;
     }
 }
-

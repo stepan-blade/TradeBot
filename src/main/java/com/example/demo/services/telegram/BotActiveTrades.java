@@ -5,8 +5,9 @@ import com.example.demo.interfaces.BotCommandsRepository;
 import com.example.demo.interfaces.TradeRepository;
 import com.example.demo.services.api.BinanceAPI;
 import com.example.demo.services.api.TelegramAPI;
+import com.example.demo.services.trade.CalculatorService;
 import com.example.demo.services.trade.TradeService;
-import com.example.demo.utils.FormatterUtil;
+import com.example.demo.utils.FormatUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,13 +20,15 @@ public class BotActiveTrades {
     private final TelegramAPI telegramAPI;
     private final BinanceAPI binanceAPI;
     private final TradeService tradeService;
+    private final CalculatorService calculatorService;
     private final TradeRepository tradeRepository;
 
     @Autowired
-    public BotActiveTrades(TelegramAPI telegramAPI, BinanceAPI binanceAPI, TradeService tradeService, TradeRepository tradeRepository) {
+    public BotActiveTrades(TelegramAPI telegramAPI, BinanceAPI binanceAPI, TradeService tradeService, CalculatorService calculatorService, TradeRepository tradeRepository) {
         this.telegramAPI = telegramAPI;
         this.binanceAPI = binanceAPI;
         this.tradeService = tradeService;
+        this.calculatorService = calculatorService;
         this.tradeRepository = tradeRepository;
     }
 
@@ -67,7 +70,7 @@ public class BotActiveTrades {
 
         for (Trade t : openTrades) {
             double currentPrice = binanceAPI.getCurrentPrice(t.getAsset());
-            double pnl = tradeService.calculateActiveProfitPercent(t, currentPrice);
+            double pnl = calculatorService.getActiveProfitPercent(t, currentPrice);
             String pnlIcon = pnl >= 0 ? "🟢" : "🔴";
 
             String text = String.format(
@@ -75,7 +78,7 @@ public class BotActiveTrades {
                             📝 Сделка: %s (%s)
                             💰 Объем: %.2f USDT
                             📊 PnL: %s %.2f%%""",
-                    FormatterUtil.formatSymbol(t.getAsset()), t.getType(), t.getVolume(), pnlIcon, pnl
+                    FormatUtil.formatSymbol(t.getAsset()), t.getType(), t.getVolume(), pnlIcon, pnl
             );
 
             telegramAPI.sendMessageWithInlineButton(
@@ -97,7 +100,7 @@ public class BotActiveTrades {
         if (tradeOpt.isPresent()) {
             Trade t = tradeOpt.get();
             double price = binanceAPI.getCurrentPrice(symbol);
-            double profit = tradeService.calculateActiveProfitPercent(t, price);
+            double profit = calculatorService.getActiveProfitPercent(t, price);
 
             String text = String.format(
                     """

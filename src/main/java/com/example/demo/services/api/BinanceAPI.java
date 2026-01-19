@@ -1,7 +1,7 @@
 package com.example.demo.services.api;
 
-import com.example.demo.utils.ExtracterUtil;
-import com.example.demo.utils.FormatterUtil;
+import com.example.demo.utils.ExtractUtil;
+import com.example.demo.utils.FormatUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,15 +38,18 @@ public class BinanceAPI {
      * @see #getCurrentPrice(String) - Текущая цена актива (USDT)
      * @see #get24hVolume(String) - 24h объём в quote (USDT)
      * @see #getKlines(String, String, int) - Klines (свечи)
+     * @see #getStepSize(String) -  Получает шаг лота (stepSize) для символа, чтобы правильно округлить количество
+     * @see #getTradeFee(String) - Получение актуальной комиссии для конкретной торговой пары.
+     * @see #getDailyPnl() - Получение дневного PNL (изменения баланса) через снимки аккаунта (Account Snapshot)
+     * @see #getAllTimePnl(String) - Получение PNL за все время на основе истории сделок.
+     *
      * @see #placeMarketBuy(String, double) - Покупка на рынке (MARKET BUY)
      * @see #placeMarketSell(String, double) - Продажа на рынке (MARKET SELL)
-     * @see #placeTakeProfitLimit(String, double, double, double) - Тейк-Профит Лимитный ордер (фиксация прибыли).
-     * @see #placeStopLossLimit(String, double, double, double) - Стоп-Лосс Лимитный ордер (защита от падения).
-     * @see #placeOCOOrder(String, double, double, double, double) - OCO Ордер (One-Cancels-the-Other).
-     * @see #cancelAllOrders(String) - Отменить все открытые ордера по символу (полезно перед выходом)
-     * @see #getTradeFee(String) - Получение актуальной комиссии для конкретной торговой пары.
-     * @see #getDailyPnl() - Получение дневного PNL (изменения баланса) через снимки аккаунта (Account Snapshot).
-     * @see #getAllTimePnl(String) - Получение PNL за все время на основе истории сделок.
+     * @see #placeTakeProfitLimit(String, double, double, double) - Тейк-Профит Лимитный ордер (фиксация прибыли)
+     * @see #placeStopLossLimit(String, double, double, double) - Стоп-Лосс Лимитный ордер (защита от падения)
+     * @see #placeOCOOrder(String, double, double, double, double) - OCO Ордер (One-Cancels-the-Other)
+     *
+     * @see #cancelAllOrders(String) - Отменить все открытые ордера по символу
      */
 
     private static final Logger logger = LoggerFactory.getLogger(BinanceAPI.class);
@@ -63,7 +66,6 @@ public class BinanceAPI {
                       @Value("${binance.testnet:false}") boolean testnet) {
         this.apiKey = apiKey;
         this.secretKey = secretKey;
-        //this.baseUrl = testnet ? "https://testnet.binance.vision/api" : "https://api.binance.com/api";
         this.baseUrl = testnet ? "https://testnet.binance.vision" : "https://api.binance.com";
         this.restTemplate = new RestTemplate();
         this.mapper = new ObjectMapper();
@@ -106,11 +108,10 @@ public class BinanceAPI {
                 entity = new HttpEntity<>(params, headers);
             }
 
-            // --- 2. ВЫПОЛНЕНИЕ ЗАПРОСА ---
+            // 1. ВЫПОЛНЕНИЕ ЗАПРОСА
             ResponseEntity<T> response = restTemplate.exchange(url, method, entity, responseType);
 
-            // --- 3. ОБНОВЛЕНИЕ ВЕСА ПОСЛЕ ЗАПРОСА (ВСТАВЛЯТЬ СЮДА) ---
-            // Извлекаем заголовок из ответа
+            // 2. ОБНОВЛЕНИЕ ВЕСА ПОСЛЕ ЗАПРОСА
             String weightHeader = response.getHeaders().getFirst("x-mbx-used-weight-1m");
             if (weightHeader != null) {
                 try {
@@ -124,7 +125,6 @@ public class BinanceAPI {
             return response.getBody();
 
         } catch (Exception e) {
-            // Здесь можно логировать ошибки 4xx/5xx
             logger.error("Ошибка при выполнении запроса к {}: {}", endpoint, e.getMessage());
             return null;
         }
@@ -147,7 +147,7 @@ public class BinanceAPI {
     }
 
     /**
-     * Получить баланс конкретной монеты (например, "BTC", "ETH", "AVAX")
+     * Получить баланс конкретной монеты
      * @param asset Валютная пара
      * @return Остаточная сумма монеты
      */
@@ -225,13 +225,122 @@ public class BinanceAPI {
     }
 
     /**
+     * Получает шаг лота (stepSize) для символа, чтобы правильно округлить количество.
+     * @param symbol Валютная пара (например, BTCUSDT)
+     */
+    public double getStepSize(String symbol) {
+        try {
+            String url = baseUrl + "/api/v3/exchangeInfo?symbol=" + symbol;
+            JsonNode root = restTemplate.getForObject(url, JsonNode.class);
+            JsonNode symbolNode = root.get("symbols").get(0);
+            for (JsonNode filter : symbolNode.get("filters")) {
+                if (filter.get("filterType").asText().equals("LOT_SIZE")) {
+                    return filter.get("stepSize").asDouble();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка получения stepSize для " + symbol + ": " + e.getMessage());
+        }
+        return 0.000001;
+    }
+
+    /**
+     * Получение актуальной комиссии для конкретной торговой пары.
+     * Позволяет точно рассчитать чистую прибыль с учетом VIP-уровня и скидок.
+     * @param symbol Валютная пара (например, BTCUSDT).
+     * @return double[] где [0] - комиссия мейкера, [1] - комиссия тейкера (в десятичном виде, т.е. 0.001 = 0.1%).
+     */
+    public double[] getTradeFee(String symbol) {
+        if (baseUrl.contains("testnet")) {
+            return new double[]{0.001, 0.001};
+        }
+
+        try {
+            MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+            params.add("symbol", symbol);
+            JsonNode response = signedRequest("/sapi/v1/asset/tradeFee", HttpMethod.GET, params, JsonNode.class);
+
+            if (response != null && response.isArray() && !response.isEmpty()) {
+                JsonNode feeNode = response.get(0);
+                return new double[]{
+                        feeNode.get("makerCommission").asDouble(),
+                        feeNode.get("takerCommission").asDouble()
+                };
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Не удалось получить TradeFee (возможно, пара недоступна): " + e.getMessage());
+        }
+        // Fallback значения
+        return new double[]{0.001, 0.001};
+    }
+
+    /**
+     * Получение PNL за все время на основе истории сделок.
+     * Метод агрегирует все исполненные ордера (реализованная прибыль).
+     * @param symbol Валютная пара для анализа.
+     * @return double Суммарный реализованный профит/убыток в USDT.
+     */
+    public double getAllTimePnl(String symbol) {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("symbol", symbol);
+
+        JsonNode trades = signedRequest("/api/v3/myTrades", HttpMethod.GET, params, JsonNode.class);
+
+        double totalPnl = 0.0;
+        if (trades != null && trades.isArray()) {
+            for (JsonNode trade : trades) {
+                double price = trade.get("price").asDouble();
+                double qty = trade.get("qty").asDouble();
+                double commission = trade.get("commission").asDouble();
+                String side = trade.get("isBuyer").asBoolean() ? "BUY" : "SELL";
+
+                if ("BUY".equals(side)) {
+                    totalPnl -= (price * qty);
+                } else {
+                    totalPnl += (price * qty);
+                }
+
+                if ("USDT".equals(trade.get("commissionAsset").asText())) {
+                    totalPnl -= commission;
+                }
+            }
+        }
+        return totalPnl;
+    }
+
+    /**
+     * Получение дневного PNL (изменения баланса) через снимки аккаунта (Account Snapshot).
+     * Метод сравнивает общую оценку аккаунта в USDT за последние 2 дня.
+     * * @return double Значение PNL в USDT за последние 24 часа.
+     */
+    public double getDailyPnl() {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("type", "SPOT");
+        params.add("limit", "5");
+
+        JsonNode response = signedRequest("/sapi/v1/accountSnapshot", HttpMethod.GET, params, JsonNode.class);
+
+        if (response != null && response.has("snapshotVos") && response.get("snapshotVos").size() >= 2) {
+            JsonNode snapshots = response.get("snapshotVos");
+            int lastIdx = snapshots.size() - 1;
+
+            double currentTotalBtc = snapshots.get(lastIdx).get("data").get("totalAssetOfBtc").asDouble();
+            double yesterdayTotalBtc = snapshots.get(lastIdx - 1).get("data").get("totalAssetOfBtc").asDouble();
+            double btcPrice = getCurrentPrice("BTCUSDT");
+
+            return (currentTotalBtc - yesterdayTotalBtc) * btcPrice;
+        }
+        return 0.0;
+    }
+
+    /**
      * Покупка на рынке (MARKET BUY)
      * @param symbol Валютная пара (например, BTCUSDT)
      * @param quantity Количество монет для продажи
      */
     public String placeMarketBuy(String symbol, double quantity) {
-        double stepSize = getStepSize(symbol); // Получаем шаг для конкретной монеты
-        double formattedQuantity = FormatterUtil.roundToStep(quantity, stepSize); // Округляем
+        double stepSize = getStepSize(symbol);
+        double formattedQuantity = FormatUtil.roundToStep(quantity, stepSize);
 
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("symbol", symbol);
@@ -268,26 +377,6 @@ public class BinanceAPI {
     }
 
     /**
-     * Получает шаг лота (stepSize) для символа, чтобы правильно округлить количество.
-     * @param symbol Валютная пара (например, BTCUSDT)
-     */
-    public double getStepSize(String symbol) {
-        try {
-            String url = baseUrl + "/api/v3/exchangeInfo?symbol=" + symbol;
-            JsonNode root = restTemplate.getForObject(url, JsonNode.class);
-            JsonNode symbolNode = root.get("symbols").get(0);
-            for (JsonNode filter : symbolNode.get("filters")) {
-                if (filter.get("filterType").asText().equals("LOT_SIZE")) {
-                    return filter.get("stepSize").asDouble();
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Ошибка получения stepSize для " + symbol + ": " + e.getMessage());
-        }
-        return 0.000001; // Безопасный дефолт
-    }
-
-    /**
      * Стоп-Лосс Лимитный ордер (защита от падения).
      * @param symbol Валютная пара (например, BTCUSDT)
      * @param quantity Количество монет для продажи
@@ -300,12 +389,12 @@ public class BinanceAPI {
         params.add("side", "SELL");
         params.add("type", "STOP_LOSS_LIMIT");
         params.add("timeInForce", "GTC"); // Good Till Cancel - ордер висит, пока не исполнится или не будет отменен
-        params.add("quantity", FormatterUtil.formatValue(quantity));
-        params.add("stopPrice", FormatterUtil.formatValue(stopPrice)); // Цена триггера
-        params.add("price", FormatterUtil.formatValue(limitPrice));    // Цена исполнения
+        params.add("quantity", FormatUtil.formatValue(quantity));
+        params.add("stopPrice", FormatUtil.formatValue(stopPrice)); // Цена триггера
+        params.add("price", FormatUtil.formatValue(limitPrice));    // Цена исполнения
 
         JsonNode response = signedRequest("/api/v3/order", HttpMethod.POST, params, JsonNode.class);
-        return ExtracterUtil.extractOrderId(response);
+        return ExtractUtil.extractOrderId(response);
     }
 
     /**
@@ -321,12 +410,12 @@ public class BinanceAPI {
         params.add("side", "SELL");
         params.add("type", "TAKE_PROFIT_LIMIT");
         params.add("timeInForce", "GTC");
-        params.add("quantity", FormatterUtil.formatValue(quantity));
-        params.add("stopPrice", FormatterUtil.formatValue(stopPrice));
-        params.add("price", FormatterUtil.formatValue(limitPrice));
+        params.add("quantity", FormatUtil.formatValue(quantity));
+        params.add("stopPrice", FormatUtil.formatValue(stopPrice));
+        params.add("price", FormatUtil.formatValue(limitPrice));
 
         JsonNode response = signedRequest("/api/v3/order", HttpMethod.POST, params, JsonNode.class);
-        return ExtracterUtil.extractOrderId(response);
+        return ExtractUtil.extractOrderId(response);
     }
 
     /**
@@ -344,14 +433,14 @@ public class BinanceAPI {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("symbol", symbol);
         params.add("side", "SELL");
-        params.add("quantity", FormatterUtil.formatValue(quantity));
+        params.add("quantity", FormatUtil.formatValue(quantity));
 
         // Take Profit (Limit Maker)
-        params.add("price", FormatterUtil.formatValue(takeProfitPrice));
+        params.add("price", FormatUtil.formatValue(takeProfitPrice));
 
         // Stop Loss (Limit Maker)
-        params.add("stopPrice", FormatterUtil.formatValue(stopLossTrigger));
-        params.add("stopLimitPrice", FormatterUtil.formatValue(stopLossLimit));
+        params.add("stopPrice", FormatUtil.formatValue(stopLossTrigger));
+        params.add("stopLimitPrice", FormatUtil.formatValue(stopLossLimit));
         params.add("stopLimitTimeInForce", "GTC");
 
         // Endpoint (/v3/order/oco)
@@ -365,105 +454,12 @@ public class BinanceAPI {
     }
 
     /**
-     * Отменить все открытые ордера по символу (полезно перед выходом)
+     * Отменить все открытые ордера по символу
+     * @param symbol Валютная пара
      */
     public void cancelAllOrders(String symbol) {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("symbol", symbol);
         signedRequest("/api/v3/openOrders", HttpMethod.DELETE, params, String.class);
-    }
-
-    /**
-     * Получение актуальной комиссии для конкретной торговой пары.
-     * Позволяет точно рассчитать чистую прибыль с учетом VIP-уровня и скидок.
-     * * @param symbol Валютная пара (например, BTCUSDT).
-     * @return double[] где [0] - комиссия мейкера, [1] - комиссия тейкера (в десятичном виде, т.е. 0.001 = 0.1%).
-     */
-    public double[] getTradeFee(String symbol) {
-        // Если Testnet - возвращаем стандартную комиссию 0.1%
-        if (baseUrl.contains("testnet")) {
-            return new double[]{0.001, 0.001};
-        }
-
-        try {
-            MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-            params.add("symbol", symbol);
-            JsonNode response = signedRequest("/sapi/v1/asset/tradeFee", HttpMethod.GET, params, JsonNode.class);
-
-            if (response != null && response.isArray() && !response.isEmpty()) {
-                JsonNode feeNode = response.get(0);
-                return new double[]{
-                        feeNode.get("makerCommission").asDouble(),
-                        feeNode.get("takerCommission").asDouble()
-                };
-            }
-        } catch (Exception e) {
-            // Логируем, но не роняем бота
-            System.err.println("⚠️ Не удалось получить TradeFee (возможно, пара недоступна): " + e.getMessage());
-        }
-        // Fallback значения
-        return new double[]{0.001, 0.001};
-    }
-
-    /**
-     * Получение дневного PNL (изменения баланса) через снимки аккаунта (Account Snapshot).
-     * Метод сравнивает общую оценку аккаунта в USDT за последние 2 дня.
-     * * @return double Значение PNL в USDT за последние 24 часа.
-     */
-    public double getDailyPnl() {
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("type", "SPOT");
-        params.add("limit", "5");
-
-        JsonNode response = signedRequest("/sapi/v1/accountSnapshot", HttpMethod.GET, params, JsonNode.class);
-
-        if (response != null && response.has("snapshotVos") && response.get("snapshotVos").size() >= 2) {
-            JsonNode snapshots = response.get("snapshotVos");
-            int lastIdx = snapshots.size() - 1;
-
-            double currentTotalBtc = snapshots.get(lastIdx).get("data").get("totalAssetOfBtc").asDouble();
-            double yesterdayTotalBtc = snapshots.get(lastIdx - 1).get("data").get("totalAssetOfBtc").asDouble();
-            double btcPrice = getCurrentPrice("BTCUSDT");
-
-            return (currentTotalBtc - yesterdayTotalBtc) * btcPrice;
-        }
-        return 0.0;
-    }
-
-    /**
-     * Получение PNL за все время на основе истории сделок.
-     * Метод агрегирует все исполненные ордера (реализованная прибыль).
-     * * @param symbol Валютная пара для анализа.
-     * @return double Суммарный реализованный профит/убыток в USDT.
-     */
-    public double getAllTimePnl(String symbol) {
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("symbol", symbol);
-
-        // Получаем все сделки пользователя по конкретному символу
-        JsonNode trades = signedRequest("/api/v3/myTrades", HttpMethod.GET, params, JsonNode.class);
-
-        double totalPnl = 0.0;
-        if (trades != null && trades.isArray()) {
-            for (JsonNode trade : trades) {
-                double price = trade.get("price").asDouble();
-                double qty = trade.get("qty").asDouble();
-                double commission = trade.get("commission").asDouble();
-                String side = trade.get("isBuyer").asBoolean() ? "BUY" : "SELL";
-
-                // Упрощенная логика: вычитаем затраты при покупке, прибавляем выручке при продаже
-                if ("BUY".equals(side)) {
-                    totalPnl -= (price * qty);
-                } else {
-                    totalPnl += (price * qty);
-                }
-
-                // Если комиссия была в USDT, вычитаем её
-                if ("USDT".equals(trade.get("commissionAsset").asText())) {
-                    totalPnl -= commission;
-                }
-            }
-        }
-        return totalPnl;
     }
 }

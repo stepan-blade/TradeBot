@@ -15,26 +15,29 @@ public class Trade {
     private String exitTime; //Время закрытия сделки
     private double entryPrice; //Цена актива на входе
     private double exitPrice; //Цена актива на выходе
-    private Double bestPrice = 0.0; //Лучшая цена актива за период открытой сделки
+    private Double bestPrice; //Лучшая цена актива за период открытой сделки
     private double profit; //Результат сделки в %
     private String status; // "OPEN" или "CLOSED"
-    private Double stopLoss = 0.0; //Точка для стоп-лосс
-    private Double takeProfit = 0.0; //Точка для тэйк-профит
+    private Double stopLoss; //Точка для стоп-лосс
+    private Double takeProfit; //Точка для тэйк-профит
     private String type; // LONG или SHORT
 
     public Trade() {
     }
 
-    public Trade(String time, String asset, String type, double entryPrice, double volume, double quantity) {
-        this.entryTime = time;
+    public Trade( String asset, String entryTime, double entryPrice, String type, double volume, double quantity, Double stopLoss) {
         this.asset = asset;
-        this.type = type;
+        this.entryTime = entryTime;
         this.entryPrice = entryPrice;
-        this.volume = volume;
         this.bestPrice = entryPrice;
+        this.type = type;
+        this.volume = volume;
+        this.quantity = quantity;
         this.status = "OPEN";
         this.profit = 0.0;
         this.exitPrice = 0.0;
+        this.takeProfit = 0.0;
+        this.stopLoss = stopLoss;
     }
 
     public Long getId() { return id; }

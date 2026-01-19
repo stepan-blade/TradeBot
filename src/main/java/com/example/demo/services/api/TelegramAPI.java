@@ -12,13 +12,15 @@ public class TelegramAPI {
 
     /**
      * @see #getLatestMessage() - Метод для получения текста отправленного пользователем сообщения
+     * @see #getLatestCallbackData() - Получает последние данные обратного вызова (callback_data) от кнопки.
+     *
      * @see #sendMessage(String) - Отправка сообщения
      * @see #sendMessageWithInlineButton(String, String, String) - Отправка сообщения с кнопкой действия
-     * @see #deleteMessageWithInlineButton() - Метод для удаления сообщений с кнопками действия
      * @see #sendConfirmationButtons(String, String, String, String, String) - Форма подтверждения действия (Да/нет)
-     * @see #deleteMessageWithConfirmationButtons() - Метод для удаления сообщения с формой подтверждения
-     * @see #getLatestCallbackData() - Получает последние данные обратного вызова (callback_data) от кнопки.
      * @see #sendRequest(String, Map, boolean) - Универсальный вспомогательный метод для отправки POST-запросов к Telegram Bot API.
+     *
+     * @see #deleteMessageWithInlineButton() - Метод для удаления сообщений с кнопками действия
+     * @see #deleteMessageWithConfirmationButtons() - Метод для удаления сообщения с формой подтверждения
      */
 
     private final String CHAT_ID;
@@ -31,9 +33,65 @@ public class TelegramAPI {
     private String latestCallbackData;
 
     @Autowired
-    public TelegramAPI(@Value("${telegram.bot.token}") String botToken, @Value("${telegram.chat.id}") String chatId) {
+    public TelegramAPI(
+            @Value("${telegram.bot.token}") String botToken,
+            @Value("${telegram.chat.id}") String chatId) {
         this.CHAT_ID = chatId;
         this.API_URL = "https://api.telegram.org/bot" + botToken;
+    }
+
+    /**
+     * Метод для получения последнего отправленного пользователем сообщения
+     * @return Текст сообщения
+     */
+    public String getLatestMessage() {
+        try {
+            String url = API_URL + "/getUpdates?offset=" + (lastUpdateId + 1) + "&timeout=0";
+            Map response = restTemplate.getForObject(url, Map.class);
+
+            if (response == null || response.get("result") == null) return null;
+
+            List<Object> updates = (List<Object>) response.get("result");
+            String textToReturn = null;
+
+            for (Object updateObj : updates) {
+                Map<String, Object> update = (Map<String, Object>) updateObj;
+                this.lastUpdateId = Long.parseLong(update.get("update_id").toString());
+
+                // Обработка КНОПОК
+                if (update.containsKey("callback_query")) {
+                    Map<String, Object> cb = (Map<String, Object>) update.get("callback_query");
+                    this.latestCallbackData = cb.get("data").toString();
+                    System.out.println(">>> [DEBUG] Callback пойман: " + latestCallbackData);
+                }
+
+                // Обработка СООБЩЕНИЙ
+                if (update.containsKey("message")) {
+                    Map<String, Object> msg = (Map<String, Object>) update.get("message");
+                    if (msg.containsKey("text")) {
+                        textToReturn = msg.get("text").toString();
+                    }
+                }
+            }
+            return textToReturn;
+        } catch (Exception e) {
+            System.err.println(">>> [CRITICAL] Ошибка API: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Получает последние данные обратного вызова (callback_data) от кнопки.
+     * Метод реализует принцип "прочитал — удалил". Это гарантирует, что одно нажатие
+     * кнопки будет обработано строго один раз и не вызовет повторных срабатываний
+     * при следующем цикле опроса (polling).
+     * * @return String — строка данных из кнопки (например, "execute_close:BTCUSDT")
+     * или null, если новых нажатий не было.
+     */
+    public String getLatestCallbackData() {
+        String data = this.latestCallbackData;
+        this.latestCallbackData = null;
+        return data;
     }
 
     /**
@@ -99,43 +157,24 @@ public class TelegramAPI {
     }
 
     /**
-     * Метод для получения последнего отправленного пользователем сообщения
-     * @return Текст сообщения
+     * Универсальный вспомогательный метод для отправки POST-запросов к Telegram Bot API.
+     * Инкапсулирует работу с restTemplate и обработку ошибок связи.
+     * Если запрос помечен как "меню", ID созданного сообщения сохраняется для последующей очистки.
+     * @param path   Эндпоинт метода Telegram API (например, "/sendMessage" или "/deleteMessage").
+     * @param body   Карта (Map) с параметрами запроса, которая будет конвертирована в JSON.
+     * @param isMenu Флаг, указывающий, является ли сообщение интерактивным меню.
+     * Если true, ID сообщения будет добавлен в список activeMenuMessageIds
+     * для массового удаления кнопок при выборе действия.
      */
-    public String getLatestMessage() {
+    private void sendRequest(String path, Map<String, Object> body, boolean isMenu) {
         try {
-            // timeout=0 чтобы не блокировать потоки!
-            String url = API_URL + "/getUpdates?offset=" + (lastUpdateId + 1) + "&timeout=0";
-            Map response = restTemplate.getForObject(url, Map.class);
-
-            if (response == null || response.get("result") == null) return null;
-
-            List<Object> updates = (List<Object>) response.get("result");
-            String textToReturn = null;
-
-            for (Object updateObj : updates) {
-                Map<String, Object> update = (Map<String, Object>) updateObj;
-                this.lastUpdateId = Long.parseLong(update.get("update_id").toString());
-
-                // Обработка КНОПОК
-                if (update.containsKey("callback_query")) {
-                    Map<String, Object> cb = (Map<String, Object>) update.get("callback_query");
-                    this.latestCallbackData = cb.get("data").toString();
-                    System.out.println(">>> [DEBUG] Callback пойман: " + latestCallbackData);
-                }
-
-                // Обработка СООБЩЕНИЙ
-                if (update.containsKey("message")) {
-                    Map<String, Object> msg = (Map<String, Object>) update.get("message");
-                    if (msg.containsKey("text")) {
-                        textToReturn = msg.get("text").toString();
-                    }
-                }
+            Map<?, ?> response = restTemplate.postForObject(API_URL + path, body, Map.class);
+            if (isMenu && response != null && response.get("result") != null) {
+                Map<?, ?> result = (Map<?, ?>) response.get("result");
+                activeMenuMessageIds.add((Integer) result.get("message_id"));
             }
-            return textToReturn;
         } catch (Exception e) {
-            System.err.println(">>> [CRITICAL] Ошибка API: " + e.getMessage());
-            return null;
+            System.err.println("Ошибка запроса: " + e.getMessage());
         }
     }
 
@@ -163,41 +202,4 @@ public class TelegramAPI {
         }
         activeMenuMessageIds.clear();
     }
-
-    /**
-     * Получает последние данные обратного вызова (callback_data) от кнопки.
-     * Метод реализует принцип "прочитал — удалил". Это гарантирует, что одно нажатие
-     * кнопки будет обработано строго один раз и не вызовет повторных срабатываний
-     * при следующем цикле опроса (polling).
-     * * @return String — строка данных из кнопки (например, "execute_close:BTCUSDT")
-     * или null, если новых нажатий не было.
-     */
-    public String getLatestCallbackData() {
-        String data = this.latestCallbackData;
-        this.latestCallbackData = null;
-        return data;
-    }
-
-    /**
-     * Универсальный вспомогательный метод для отправки POST-запросов к Telegram Bot API.
-     * Инкапсулирует работу с restTemplate и обработку ошибок связи.
-     * Если запрос помечен как "меню", ID созданного сообщения сохраняется для последующей очистки.
-     * @param path   Эндпоинт метода Telegram API (например, "/sendMessage" или "/deleteMessage").
-     * @param body   Карта (Map) с параметрами запроса, которая будет конвертирована в JSON.
-     * @param isMenu Флаг, указывающий, является ли сообщение интерактивным меню.
-     * Если true, ID сообщения будет добавлен в список activeMenuMessageIds
-     * для массового удаления кнопок при выборе действия.
-     */
-    private void sendRequest(String path, Map<String, Object> body, boolean isMenu) {
-        try {
-            Map<?, ?> response = restTemplate.postForObject(API_URL + path, body, Map.class);
-            if (isMenu && response != null && response.get("result") != null) {
-                Map<?, ?> result = (Map<?, ?>) response.get("result");
-                activeMenuMessageIds.add((Integer) result.get("message_id"));
-            }
-        } catch (Exception e) {
-            System.err.println("Ошибка запроса: " + e.getMessage());
-        }
-    }
-
 }

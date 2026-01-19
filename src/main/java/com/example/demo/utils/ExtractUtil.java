@@ -2,7 +2,7 @@ package com.example.demo.utils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-public class ExtracterUtil {
+public class ExtractUtil {
 
     /**
      * Вспомогательный метод для извлечения ID
@@ -14,7 +14,7 @@ public class ExtracterUtil {
         }
 
         if (response != null && response.has("msg")) {
-            System.err.println("Binance Error: " + response.get("msg").asText());
+            System.err.println(">>> [BINANCE ERROR] Ошибка ExtracterUtil: " + response.get("msg").asText());
         }
         return null;
     }
