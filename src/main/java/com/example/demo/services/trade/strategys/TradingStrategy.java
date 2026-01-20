@@ -32,14 +32,12 @@ public class TradingStrategy {
      * @param currentPrice Текущая цена актива
      */
     public void checkEntryConditions(String symbol, double currentPrice) {
-        if (tradeService.isCoolDown(symbol)) {
-            return;
-        }
+        if (tradeService.isCoolDown(symbol)) return;
 
         double volume24h = binanceAPI.get24hVolume(symbol);
         if (volume24h < 5000000) return;
 
-        List<double[]> klines = binanceAPI.getKlines(symbol, "1m", 200);
+        List<double[]> klines = binanceAPI.getKlines(symbol, "5m", 250);
         if (klines.isEmpty()) return;
 
         double rsi = indicatorService.calculateRSI(klines, 14);
@@ -50,8 +48,10 @@ public class TradingStrategy {
 
         BotSettings settings = botSettingsRepository.findById("MAIN_SETTINGS").orElseThrow();
         double tradePercent = settings.getTradePercent();
-        if (currentPrice > sma200 && rsi < 35 && currentPrice <= bb[2] && tradeService.getBalance() >= 5) {
-            tradeService.openPosition(symbol, currentPrice, tradePercent);
+
+        // Только LONG (для spot — безопасно и стабильно)
+        if (currentPrice > sma200 && rsi < 35 && currentPrice <= bb[2]) {
+            tradeService.openPosition(symbol, currentPrice, tradePercent, "LONG");
         }
     }
 }

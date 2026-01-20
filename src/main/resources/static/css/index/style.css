@@ -139,4 +139,20 @@ td[style*="color: #aaaaaa"] {
     vertical-align: 0.255em;
 }
 
-#view-selector { background-color: #2d2d2d; border: 1px solid #444; color: white; border-radius: 8px; }
+#view-selector {
+    background-color: #2d2d2d;
+    border: 1px solid #444;
+    color: white;
+    border-radius: 8px;
+}
+
+/*--------cooldown-section--------*/
+#cooldown-section .badge {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+    font-weight: 500;
+}
+
+#cooldown-section h5 {
+    opacity: 0.9;
+}

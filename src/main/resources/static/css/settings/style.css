@@ -58,9 +58,62 @@ body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-
 
 /* Стиль для текста рядом с кнопкой */
 .text-danger-light {
-    color: #ff6b6b;
+    color: #ff6b6b !important;
     font-size: 0.85rem;
     opacity: 0.9;
+}
+
+/* Кнопка ВКЛЮЧИТЬ (Зеленая) */
+.btn-outline-success-custom {
+    color: #00ff88 !important;
+    border: 1px solid #00ff88 !important;
+    background: transparent !important;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-outline-success-custom:hover {
+    background-color: #00ff88 !important;
+    color: #000 !important;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+}
+
+/* Статус: Активен (Зеленый текст) */
+.text-success-light {
+    color: #00ff88 !important;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+/* Статус: Остановлен (Красный текст) */
+.text-danger-light {
+    color: #ff6b6b !important;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+/* Общий стиль для кнопок в карточках для одинаковой ширины */
+.status-zone .btn, .danger-zone .btn {
+    min-width: 120px; /* Фиксированная минимальная ширина как у кнопки Очистить */
+    text-align: center;
+}
+
+/* Общие параметры для кнопок действий в карточках */
+.danger-zone .btn,
+.status-zone .btn {
+    width: 125px !important;
+    height: 55px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem !important;
+    white-space: nowrap;
+}
+
+/* Сброс лишних отступов, чтобы ширина была точной */
+.btn-outline-danger-custom,
+.btn-outline-success-custom {
+    font-weight: 600 !important;
 }
 
 /* Оверлей сохранения */

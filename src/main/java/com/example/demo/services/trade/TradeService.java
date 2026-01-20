@@ -28,7 +28,7 @@ public class TradeService {
 
     /**
      * @see #getBalance() - текущий остаток USDT на счете Binance
-     * @see #openPosition(String, double, double) - покупка актива
+     * @see #openPosition(String, double, double, String)  - покупка актива
      *
      * @see #closePosition(Trade, double, String) - продажа актива
      * @see #closePositionInDB(Trade, double, String) - Внутренний метод для закрытия сделки ТОЛЬКО в базе (без отправки ордера)
@@ -41,7 +41,6 @@ public class TradeService {
      * @see #syncTradesWithExchange() - Проверяет, остались ли монеты на балансе. Если нет — закрывает сделку в БД.
      * @see #isCoolDown(String) - Проверка актива во временном стоп-листе
      */
-
     private final BinanceAPI binanceAPI;
     private final TelegramAPI telegramAPI;
     private final CalculatorService calculatorService;
@@ -70,7 +69,7 @@ public class TradeService {
 
     @PostConstruct
     public void init() {
-        this.usdtBalance = binanceAPI.getAccountBalance();
+        updateBalanceFromExchange();
 
         BotSettings botSettings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(new BotSettings());
         if (botSettings.getBalance() == 0) {
@@ -79,90 +78,134 @@ public class TradeService {
         }
     }
 
+    private void updateBalanceFromExchange() {
+        try {
+            this.usdtBalance = binanceAPI.getAccountBalance();
+        } catch (Exception e) {
+            logger.error("Ошибка инициализации баланса: {}", e.getMessage());
+            this.usdtBalance = 0.0;
+        }
+    }
+
     /**
      * Текущий остаток USDT на счете Binance
      * @return Остаток USDT на счете Binance
      */
     public double getBalance() {
-        try {
-            this.usdtBalance = binanceAPI.getAccountBalance();
-            return usdtBalance;
-        } catch (Exception e) {
-            System.err.println("Ошибка получения баланса: " + e.getMessage());
-            return 0.0;
-        }
+        updateBalanceFromExchange();
+        return usdtBalance;
     }
 
     /**
-     * Покупка актива
-     * @param symbol Валютная пара
-     * @param price Цена входа
-     * @param percent Процент от свободного баланса
+     * Открытие позиции (LONG или SHORT)
+     * @param symbol  Валютная пара
+     * @param price   Текущая цена
+     * @param percent Процент от баланса
+     * @param type    "LONG" или "SHORT"
      */
-    public void openPosition(String symbol, double price, double percent) {
-        double buyUsdt = Math.min(usdtBalance * (percent / 100.0), usdtBalance);
-        if (buyUsdt < 5.0) return;
-
-        // 1. Получаем правила округления от биржи
-        double stepSize = binanceAPI.getStepSize(symbol);
-
-        // 2. Рассчитываем и СТРОГО округляем количество
-        double rawQuantity = buyUsdt / price;
-        double quantity = FormatUtil.roundToStep(rawQuantity, stepSize);
-
-        // 3. Попытка покупки
-        String orderId = null;
-        try {
-            orderId = binanceAPI.placeMarketBuy(symbol, quantity);
-        } catch (Exception e) {
-            telegramAPI.sendMessage("❌ Ошибка покупки " + symbol + ": " + e.getMessage());
+    public void openPosition(String symbol, double price, double percent, String type) {
+        double availableUsdt = getBalance();
+        double buyUsdt = Math.min(availableUsdt * (percent / 100.0), availableUsdt);
+        if (buyUsdt < 10.0) {
+            logger.warn("Недостаточно USDT для открытия {} ({})", symbol, type);
             return;
         }
 
-        if (orderId == null) return;
+        double stepSize = binanceAPI.getStepSize(symbol);
+        double rawQuantity = buyUsdt / price;
+        double quantity = FormatUtil.roundToStep(rawQuantity, stepSize);
 
-        // 4. Попытка установки защиты (Stop Loss)
+        // Отмена старых ордеров перед открытием
+        binanceAPI.cancelAllOrders(symbol);
+
+        String orderId = null;
         try {
-            double stopPrice = price * 0.98;
-            double limitPrice = stopPrice * 0.995;
-
-            binanceAPI.placeStopLossLimit(symbol, quantity, stopPrice, limitPrice);
-
+            if ("LONG".equals(type)) {
+                orderId = binanceAPI.placeMarketBuy(symbol, quantity);
+            } else {
+                orderId = binanceAPI.placeMarketSell(symbol, quantity);
+            }
         } catch (Exception e) {
-            telegramAPI.sendMessage(
-                    "⚠️ ВНИМАНИЕ! Откат сделки " + symbol +
-                    "\nНе удалось поставить StopLoss: " + e.getMessage()
-            );
+            telegramAPI.sendMessage("❌ Ошибка открытия " + type + " " + symbol + ": " + e.getMessage());
+            return;
+        }
+
+        if (orderId == null) {
+            telegramAPI.sendMessage("❌ Не удалось открыть " + type + " " + symbol);
+            return;
+        }
+
+        // Получаем реальное количество монет после исполнения
+        double actualQuantity = 0;
+        try {
+            String baseAsset = symbol.replace("USDT", "");
+            actualQuantity = binanceAPI.getAssetBalance(baseAsset);
+            if ("SHORT".equals(type)) {
+
+                actualQuantity = binanceAPI.getAccountBalance() - usdtBalance;
+            }
+        } catch (Exception e) {
+            telegramAPI.sendMessage("⚠️ Ошибка получения актуального quantity для " + symbol);
+        }
+
+        if (actualQuantity <= 0) {
+            telegramAPI.sendMessage("⚠️ Получено 0 монет после открытия " + symbol + " — откат");
             try {
-                binanceAPI.placeMarketSell(symbol, quantity);
-            } catch (Exception sellEx) {
-                telegramAPI.sendMessage("🆘 SOS! Не удалось продать актив обратно! Ручное вмешательство: " + symbol);
+                if ("LONG".equals(type)) binanceAPI.placeMarketSell(symbol, quantity);
+                else binanceAPI.placeMarketBuy(symbol, quantity);
+            } catch (Exception rollbackEx) {
+                telegramAPI.sendMessage("🆘 SOS! Не удалось откатить позицию " + symbol);
             }
             return;
         }
 
-        logger.info("Открытие сделки: {}", symbol);
-        logger.info("✅ Куплено монеты {}: {}", symbol, quantity);
+        // Округляем actualQuantity под stepSize
+        stepSize = binanceAPI.getStepSize(symbol);
+        actualQuantity = FormatUtil.roundToStep(actualQuantity, stepSize);
+
+        // Ставим stop-loss с актуальным quantity
+        try {
+            double stopPrice;
+            double limitPrice;
+            String slSide = "LONG".equals(type) ? "SELL" : "BUY";
+
+            if ("LONG".equals(type)) {
+                stopPrice = price * 0.98;
+                limitPrice = stopPrice * 0.995;
+            } else {
+                stopPrice = price * 1.02;
+                limitPrice = stopPrice * 1.005;
+            }
+
+            binanceAPI.placeStopLossLimit(symbol, actualQuantity, stopPrice, limitPrice, slSide);
+        } catch (Exception e) {
+            telegramAPI.sendMessage("⚠️ Не удалось поставить SL для " + type + " " + symbol + ": " + e.getMessage());
+            try {
+                if ("LONG".equals(type)) {
+                    binanceAPI.placeMarketSell(symbol, actualQuantity);
+                } else {
+                    binanceAPI.placeMarketBuy(symbol, actualQuantity);
+                }
+            } catch (Exception rollbackEx) {
+                telegramAPI.sendMessage("🆘 SOS! Критическая ошибка — позиция " + symbol + " открыта без SL!");
+            }
+            return;
+        }
+
+        // Обновляем баланс и сохраняем сделку actualQuantity
+        updateBalanceFromExchange();
 
         String startTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm"));
-
-        Trade trade = new Trade(
-                symbol,
-                startTime,
-                price,
-                "LONG",
-                buyUsdt,
-                quantity,
-                price * 0.98
-        );
-
+        Trade trade = new Trade(symbol, startTime, price, type, buyUsdt, actualQuantity, ("LONG".equals(type) ? price * 0.98 : price * 1.02));
         tradeRepository.save(trade);
 
-        telegramAPI.sendMessage("🚀 ПОКУПКА\n" +
-                "Актив: " + FormatUtil.formatSymbol(symbol) + "\n" +
-                "Сумма: " + String.format("%.2f", buyUsdt) + " USDT\n" +
-                "Количество: " + String.format("%.6f", quantity) + "\n" +
-                "Остаток USDT: " + String.format("%.2f", usdtBalance - buyUsdt));
+        telegramAPI.sendMessage(String.format("""
+                        🚀 ОТКРЫТА %s ПОЗИЦИЯ
+                        Актив: %s
+                        Сумма: %.2f USDT
+                        Количество: %.6f (фактическое)
+                        Остаток USDT: %.2f""",
+                type, FormatUtil.formatSymbol(symbol), buyUsdt, actualQuantity, usdtBalance));
     }
 
     /**
@@ -172,44 +215,46 @@ public class TradeService {
      * @param reason Причина продажи
      */
     public void closePosition(Trade trade, double currentPrice, String reason) {
+        // Отмена всех ордеров перед закрытием
+        binanceAPI.cancelAllOrders(trade.getAsset());
+
         double quantity = trade.getQuantity();
-
-        // ЗАЩИТА: Если в базе 0, пробуем взять реальный баланс с биржи
         if (quantity <= 0) {
-            logger.warn("⚠️ В базе данных quantity=0 для {}. Запрашиваю баланс с биржи...", trade.getAsset());
-            quantity = binanceAPI.getAssetBalance(trade.getAsset());
-            trade.setQuantity(quantity); // Сразу обновляем объект
+            quantity = binanceAPI.getAssetBalance(trade.getAsset().replace("USDT", ""));
+            if (quantity <= 0) {
+                logger.error("Не удалось закрыть {}: quantity = 0 на бирже", trade.getAsset());
+                return;
+            }
         }
 
-        if (quantity <= 0) {
-            logger.error("❌ Не удалось закрыть сделку {}: Баланс на бирже тоже 0", trade.getAsset());
-            return;
-        }
-
-        // 1. Выполняем продажу на бирже
         String orderId = null;
         try {
-            orderId = binanceAPI.placeMarketSell(trade.getAsset(), quantity);
+            if ("LONG".equals(trade.getType())) {
+                orderId = binanceAPI.placeMarketSell(trade.getAsset(), quantity);
+            } else {
+                orderId = binanceAPI.placeMarketBuy(trade.getAsset(), quantity);
+            }
         } catch (Exception e) {
-            telegramAPI.sendMessage("❌ Ошибка продажи " + trade.getAsset() + ": " + e.getMessage());
+            telegramAPI.sendMessage("❌ Ошибка закрытия " + trade.getType() + " " + trade.getAsset() + ": " + e.getMessage());
             return;
         }
-        logger.info("Закрытие сделки: {}", trade.getAsset());
 
-        // 2. Рассчитываем финансовый результат через единый метод
+        if (orderId == null) {
+            telegramAPI.sendMessage("❌ Не удалось закрыть позицию " + trade.getAsset());
+            return;
+        }
+
+        // Актуальный расчёт прибыли
         double netProfitPercent = calculatorService.getNetResultPercent(trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType());
         double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
 
-        // 3. Обновляем баланс СТРОГО после завершения сделки на бирже
-        this.usdtBalance = binanceAPI.getAccountBalance();
+        // Обновляем баланс
+        updateBalanceFromExchange();
 
-        // 4. Сохраняем историю баланса и настройки
+        // Сохраняем историю
         balanceHistoryRepository.save(new BalanceHistory(usdtBalance, LocalDateTime.now()));
-        BotSettings settings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(new BotSettings());
-        settings.setBalance(usdtBalance);
-        botSettingsRepository.save(settings);
 
-        // 5. Обновляем и сохраняем сделку
+        // Обновляем сделку
         trade.setExitTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm")));
         trade.setExitPrice(currentPrice);
         trade.setProfit(profitUsdt);
@@ -218,60 +263,31 @@ public class TradeService {
 
         coolDownMap.put(trade.getAsset(), LocalDateTime.now().plusMinutes(cooldownMinutes));
 
-        // 6. Уведомление Telegram
-        String message = String.format("%s\nАктив: %s\nИтог: %s%.2f USDT (%.2f%%)",
+        telegramAPI.sendMessage(String.format("%s\nАктив: %s\nИтог: %s%.2f USDT (%.2f%%)",
                 reason, FormatUtil.formatSymbol(trade.getAsset()),
-                (profitUsdt >= 0 ? "+" : ""), profitUsdt, netProfitPercent);
-        telegramAPI.sendMessage(message);
-    }
-
-    /**
-     * Синхронизация статусов.
-     * Проверяет, остались ли монеты на балансе. Если нет — закрывает сделку в БД.
-     */
-    public void syncTradesWithExchange() {
-        List<Trade> activeTrades = getActiveTrades();
-
-        for (Trade trade : activeTrades) {
-            // 1. Спрашиваем у Binance реальный баланс монеты
-            double actualBalance = binanceAPI.getAssetBalance(trade.getAsset());
-
-            // 2. Считаем порог "пыли" (остатков).
-            double dustThreshold = trade.getQuantity() * 0.05;
-
-            if (actualBalance < dustThreshold) {
-                logger.info("📉 Обнаружено закрытие сделки на бирже: " + trade.getAsset());
-
-                // 3. Фиксируем закрытие
-                double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
-
-                closePositionInDB(trade, currentPrice, "⚖️ Exchange Stop/TP Triggered");
-            }
-        }
+                (profitUsdt >= 0 ? "+" : ""), profitUsdt, netProfitPercent));
     }
 
     /**
      * Внутренний метод для закрытия сделки ТОЛЬКО в базе (без отправки ордера)
      */
-    private void closePositionInDB(Trade trade, double exitPrice, String reason) {
-        // Расчет прибыли
+    public void closePositionInDB(Trade trade, double exitPrice, String reason) {
+        binanceAPI.cancelAllOrders(trade.getAsset());
+
         double netProfitPercent = calculatorService.getNetResultPercent(trade.getEntryPrice(), exitPrice, trade.getAsset(), trade.getType());
         double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
 
-        // Обновляем баланс USDT в боте
-        this.usdtBalance = binanceAPI.getAccountBalance(); // Обновляем общий кеш USDT
+        updateBalanceFromExchange();
 
-        // Сохраняем историю
         trade.setExitTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm")));
         trade.setExitPrice(exitPrice);
         trade.setProfit(profitUsdt);
-        trade.setStatus("CLOSED"); // Закрываем статус
+        trade.setStatus("CLOSED");
         tradeRepository.save(trade);
 
-        // Ставим кулдаун
         coolDownMap.put(trade.getAsset(), LocalDateTime.now().plusMinutes(cooldownMinutes));
 
-        telegramAPI.sendMessage(String.format("🔔 Синхронизация: Сделка %s закрыта биржей (%s).\nИтог: %.2f$ (%.2f%%)",
+        telegramAPI.sendMessage(String.format("🔔 Синхронизация: %s закрыта биржей (%s)\nИтог: %.2f$ (%.2f%%)",
                 trade.getAsset(), reason, profitUsdt, netProfitPercent));
     }
 
@@ -281,7 +297,8 @@ public class TradeService {
     public void closeAllPositionsManually() {
         List<Trade> open = getActiveTrades();
         for (Trade t : open) {
-            closePosition(t, binanceAPI.getCurrentPrice(t.getAsset()), "⚡ Manual Close");
+            double price = binanceAPI.getCurrentPrice(t.getAsset());
+            closePosition(t, price, "⚡ Manual Close All");
         }
     }
 
@@ -293,8 +310,34 @@ public class TradeService {
         Optional<Trade> tradeOpt = getActiveTrades().stream()
                 .filter(t -> t.getAsset().equals(symbol))
                 .findFirst();
-        tradeOpt.ifPresent(trade -> closePosition(trade, binanceAPI.getCurrentPrice(symbol), "⚡ Manual Close"));
+        tradeOpt.ifPresent(trade -> {
+            double price = binanceAPI.getCurrentPrice(symbol);
+            closePosition(trade, price, "⚡ Manual Close");
+        });
     }
+
+
+    /**
+     * Синхронизация статусов.
+     * Проверяет, остались ли монеты на балансе. Если нет — закрывает сделку в БД.
+     */
+    public void syncTradesWithExchange() {
+        List<Trade> activeTrades = getActiveTrades();
+
+        for (Trade trade : activeTrades) {
+            String baseAsset = trade.getAsset().replace("USDT", "");
+            double actualBalance = binanceAPI.getAssetBalance(baseAsset);
+
+            double dustThreshold = trade.getQuantity() * 0.05;
+
+            if (actualBalance < dustThreshold) {
+                double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
+                closePositionInDB(trade, currentPrice, "Exchange Auto Close");
+                balanceHistoryRepository.save(new BalanceHistory(usdtBalance, LocalDateTime.now()));
+            }
+        }
+    }
+
 
     /**
      * Список активных сделок

@@ -30,7 +30,7 @@ public class TradeController {
      * @see #clearHistory() - Удаляет все завершенные сделки из базы данных.
      * @see #closeSpecificTrade(String) -  Выполняет принудительное закрытие конкретной активной сделки по запросу пользователя.
      * @see #getSettings() - Извлекает глобальные настройки бота из базы данных.
-     * @see #saveSettings(String, String) - Обновляет конфигурацию торгового алгоритма.
+     * @see #saveSettings(String, String, String)  - Обновляет конфигурацию торгового алгоритма.
      * @see #previewClose(String) - Предварительный расчет финансового результата перед закрытием сделки.
      */
 
@@ -86,8 +86,8 @@ public class TradeController {
 
         status.put("allProfitPercent", calculatorService.getAllProfitPercent());
 
-        status.put("unrealizedPnLUsdt", calculatorService.getUnrealizedPnLUsdt()); // грязный для таблицы
-        status.put("unrealizedPnLUsdtWithFee", calculatorService.getUnrealizedPnLUsdtWithFee()); // чистый для общей статистики
+        status.put("unrealizedPnLUsdt", calculatorService.getUnrealizedPnLUsdt());
+        status.put("unrealizedPnLUsdtWithFee", calculatorService.getUnrealizedPnLUsdtWithFee());
 
         status.put("balanceHistory", balanceHistoryRepository.findAll());
         status.put("history", allTrades);
@@ -172,7 +172,7 @@ public class TradeController {
      * Если настройки еще ни разу не сохранялись, возвращает новый объект с
      * параметрами по умолчанию
      *
-     * @return Объект BotSettings с данными о торгуемых парах и проценте входа в сделку.
+     * @return Объект BotSettings с данными о торгуемых парах, проценте входа в сделку и статус активности.
      */
     @GetMapping("/settings")
     public ResponseEntity<BotSettings> getSettings() {
@@ -194,7 +194,8 @@ public class TradeController {
     @PostMapping("/save-settings")
     public ResponseEntity<?> saveSettings(
             @RequestParam("assets") String assets,
-            @RequestParam("trade_percent") String tradePercentStr) {
+            @RequestParam("trade_percent") String tradePercentStr,
+            @RequestParam("status") String status) {
         try {
             double tradePercent = Double.parseDouble(tradePercentStr);
 
@@ -203,6 +204,7 @@ public class TradeController {
 
             settings.setAssets(assets);
             settings.setTradePercent(tradePercent);
+            settings.setStatus(status);
             settingsRepository.save(settings);
 
             System.out.println("✅ Настройки успешно обновлены: \n" +
@@ -239,13 +241,13 @@ public class TradeController {
             );
             double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
 
-            double feePercent = calculatorService.getTotalFeePercent(symbol); // Новая строка
+            double feePercent = calculatorService.getTotalFeePercent(symbol);
 
             Map<String, Object> response = new HashMap<>();
             response.put("profitUsdt", Math.round(profitUsdt * 100.0) / 100.0);
             response.put("percent", Math.round(netProfitPercent * 100.0) / 100.0);
             response.put("currentPrice", currentPrice);
-            response.put("feePercent", feePercent); // Добавляем
+            response.put("feePercent", feePercent);
 
             return ResponseEntity.ok(response);
         }

@@ -12,12 +12,13 @@ class SettingsManager {
 
     // 1. НАСТРОЙКИ БОТА
     async init() {
-
         try {
             const settings = await window.api.getSettings();
             if (settings) {
                 if (this.assetsInput) this.assetsInput.value = settings.assets || "";
                 if (this.percentInput) this.percentInput.value = settings.tradePercent || "";
+
+                this.updateStatusUI(settings.status);
             }
         } catch (err) {
             console.error("Ошибка загрузки данных из БД:", err);
@@ -31,7 +32,6 @@ class SettingsManager {
             try {
                 const response = await window.api.saveSettings(new FormData(this.form));
                 if (response.ok) {
-                    // Показываем ту самую галочку из UIManager
                     if (window.ui) window.ui.showSuccess();
                 } else {
                     alert("Ошибка при сохранении");
@@ -58,6 +58,53 @@ class SettingsManager {
             }
         } catch (err) {
             console.error("Ошибка очистки:", err);
+        }
+    }
+
+    async toggleBotStatus() {
+        const btn = document.getElementById('toggle-bot-btn');
+        const isOnline = btn.getAttribute('data-status') === 'ONLINE';
+        const newStatus = isOnline ? 'OFFLINE' : 'ONLINE';
+
+        // Формируем данные для отправки (совместимо с контроллером)
+        const formData = new FormData();
+        formData.append('assets', this.assetsInput.value);
+        formData.append('trade_percent', this.percentInput.value);
+        formData.append('status', newStatus);
+
+        try {
+            const response = await window.api.saveSettings(formData);
+            if (response.ok) {
+                this.updateStatusUI(newStatus);
+                if (window.ui) window.ui.showSuccess();
+            }
+        } catch (err) {
+            console.error("Ошибка смены статуса:", err);
+        }
+    }
+
+    updateStatusUI(status) {
+        const btn = document.getElementById('toggle-bot-btn');
+        const text = document.getElementById('bot-status-text');
+        const hiddenInput = document.getElementById('status-hidden-input');
+
+        if (hiddenInput) hiddenInput.value = status;
+        btn.setAttribute('data-status', status);
+
+        if (status === 'ONLINE') {
+            // Состояние: Бот РАБОТАЕТ -> Кнопка ОТКЛЮЧИТЬ (Красная)
+            btn.innerHTML = '<i class="bi bi-power me-1"></i> Отключить';
+            btn.className = 'btn btn-outline-danger-custom btn-sm px-4 py-2';
+
+            text.textContent = 'Бот активен и сканирует рынок';
+            text.className = 'text-success-light';
+        } else {
+            // Состояние: Бот ВЫКЛЮЧЕН -> Кнопка ВКЛЮЧИТЬ (Зеленая)
+            btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Включить';
+            btn.className = 'btn btn-outline-success-custom btn-sm px-4 py-2';
+
+            text.textContent = 'Бот остановлен (пассивный режим)';
+            text.className = 'text-danger-light';
         }
     }
 }

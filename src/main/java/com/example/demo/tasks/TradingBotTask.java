@@ -36,21 +36,24 @@ public class TradingBotTask {
     @Scheduled(fixedDelay = 2000)
     public void executeTradeLogic() {
         BotSettings settings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(new BotSettings());
-
-        String[] assets = settings.getAssets().split(",");
-        for (String asset : assets) {
-            double currentPrice = binanceAPI.getCurrentPrice(asset.trim());
-            if (currentPrice > 0) {
-                tradingStrategy.checkEntryConditions(asset.trim(), currentPrice);
+        if (settings.getStatus().equals("ONLINE")) {
+            String[] assets = settings.getAssets().split(",");
+            for (String asset : assets) {
+                double currentPrice = binanceAPI.getCurrentPrice(asset.trim());
+                if (currentPrice > 0) {
+                    tradingStrategy.checkEntryConditions(asset.trim(), currentPrice);
+                }
             }
+
+            tradeService.getActiveTrades().forEach(trade -> {
+                double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
+                if (currentPrice > 0) {
+                    positionManager.handleTradeStop(trade, currentPrice);
+                }
+            });
+        } else {
+            System.out.println("[Binance Trading Bot demo] >>> Включен режим ожидания. Чтобы продолжить - включите бота через настройки");
         }
-
-        tradeService.getActiveTrades().forEach(trade -> {
-            double currentPrice = binanceAPI.getCurrentPrice(trade.getAsset());
-            if (currentPrice > 0) {
-                positionManager.handleTradeStop(trade, currentPrice);
-            }
-        });
     }
 
     @Scheduled(fixedRate = 10000)

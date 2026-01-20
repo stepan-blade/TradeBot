@@ -46,7 +46,7 @@ public class BinanceAPI {
      * @see #placeMarketBuy(String, double) - Покупка на рынке (MARKET BUY)
      * @see #placeMarketSell(String, double) - Продажа на рынке (MARKET SELL)
      * @see #placeTakeProfitLimit(String, double, double, double) - Тейк-Профит Лимитный ордер (фиксация прибыли)
-     * @see #placeStopLossLimit(String, double, double, double) - Стоп-Лосс Лимитный ордер (защита от падения)
+     * @see #placeStopLossLimit(String, double, double, double, String)  - Стоп-Лосс Лимитный ордер (защита от падения)
      * @see #placeOCOOrder(String, double, double, double, double) - OCO Ордер (One-Cancels-the-Other)
      *
      * @see #cancelAllOrders(String) - Отменить все открытые ордера по символу
@@ -383,15 +383,15 @@ public class BinanceAPI {
      * @param stopPrice Цена активации (триггер)
      * @param limitPrice Цена, по которой ордер пойдет в стакан после активации (обычно чуть ниже stopPrice)
      */
-    public String placeStopLossLimit(String symbol, double quantity, double stopPrice, double limitPrice) {
+    public String placeStopLossLimit(String symbol, double quantity, double stopPrice, double limitPrice, String side) {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("symbol", symbol);
-        params.add("side", "SELL");
+        params.add("side", side);
         params.add("type", "STOP_LOSS_LIMIT");
-        params.add("timeInForce", "GTC"); // Good Till Cancel - ордер висит, пока не исполнится или не будет отменен
+        params.add("timeInForce", "GTC");
         params.add("quantity", FormatUtil.formatValue(quantity));
-        params.add("stopPrice", FormatUtil.formatValue(stopPrice)); // Цена триггера
-        params.add("price", FormatUtil.formatValue(limitPrice));    // Цена исполнения
+        params.add("stopPrice", FormatUtil.formatValue(stopPrice));
+        params.add("price", FormatUtil.formatValue(limitPrice));
 
         JsonNode response = signedRequest("/api/v3/order", HttpMethod.POST, params, JsonNode.class);
         return ExtractUtil.extractOrderId(response);
@@ -458,8 +458,17 @@ public class BinanceAPI {
      * @param symbol Валютная пара
      */
     public void cancelAllOrders(String symbol) {
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("symbol", symbol);
-        signedRequest("/api/v3/openOrders", HttpMethod.DELETE, params, String.class);
+        try {
+            MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+            params.add("symbol", symbol);
+            signedRequest("/api/v3/openOrders", HttpMethod.DELETE, params, String.class);
+        } catch (Exception e) {
+            // Игнорируем -2011 — ордеров просто нет
+            if (e.getMessage() != null && e.getMessage().contains("-2011")) {
+                logger.debug("Нет открытых ордеров для {} (нормально)", symbol);
+            } else {
+                logger.warn("Ошибка отмены ордеров {}: {}", symbol, e.getMessage());
+            }
+        }
     }
 }

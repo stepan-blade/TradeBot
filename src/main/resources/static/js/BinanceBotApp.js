@@ -68,7 +68,16 @@ class BinanceBotApp {
     // ГЛАВНЫЙ МЕТОД UPDATE DASHBOARD
     async updateDashboard() {
         try {
-            const data = await this.api.fetchStatus();
+            const [cooldowns, data] = await Promise.all([
+                this.api.fetchCooldowns(),
+                this.api.fetchStatus()
+            ]);
+
+            this.ui.renderCooldowns(cooldowns);
+
+            const settings = await window.api.getSettings();
+            this.ui.updateBotStatus(settings.status);
+
             this.state.fullHistory = data.history || [];
 
             this.ui.updateHeaderStats({

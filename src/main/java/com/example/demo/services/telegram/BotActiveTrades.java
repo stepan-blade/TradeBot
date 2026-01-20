@@ -104,7 +104,7 @@ public class BotActiveTrades {
 
             String text = String.format(
                     """
-                            Закрыть %s? +
+                            Закрыть %s?
                             Текущий профит: %.2f%%""",
                     symbol, profit);
 

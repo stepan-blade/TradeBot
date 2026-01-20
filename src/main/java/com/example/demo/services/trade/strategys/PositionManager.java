@@ -9,6 +9,8 @@ import com.example.demo.services.trade.TradeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class PositionManager {
 
@@ -38,19 +40,35 @@ public class PositionManager {
      * @param currentPrice Текущая рыночная цена актива.
      */
     public void handleTradeStop(Trade trade, double currentPrice) {
-        // Используем единый метод для оценки РЕАЛЬНОГО профита в сделке прямо сейчас
         double netProfit = calculatorService.getNetResultPercent(
                 trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType()
         );
 
-        // Выход по RSI (минутный таймфрейм)
-        double rsi = indicatorService.calculateRSI(binanceAPI.getKlines(trade.getAsset(), "1m", 15), 14);
-        if (rsi > 75) {
-            tradeService.closePosition(trade, currentPrice, "💰 RSI Overbought Exit");
+        // Выход по RSI — на 5m таймфрейме (меньше шума)
+        List<double[]> klines = binanceAPI.getKlines(trade.getAsset(), "5m", 30); // 30 свечей для стабильности
+        double rsi = indicatorService.calculateRSI(klines, 14);
+
+        boolean rsiExit = false;
+        String rsiReason = "";
+
+        if ("LONG".equals(trade.getType())) {
+            if (rsi > 85 && netProfit > 0.5) { // Порог 80 + минимальная прибыль
+                rsiExit = true;
+                rsiReason = "💰 RSI Overbought Exit (80+)";
+            }
+        } else { // SHORT
+            if (rsi < 20 && netProfit > 0.5) { // Порог 20 для oversold
+                rsiExit = true;
+                rsiReason = "💰 RSI Oversold Exit (20-)";
+            }
+        }
+
+        if (rsiExit) {
+            tradeService.closePosition(trade, currentPrice, rsiReason);
             return;
         }
 
-        // Хард тейк-профит сравнивается с ЧИСТОЙ прибылью
+        // Hard TP остаётся (чистая 2.5%)
         if (netProfit >= 2.5) {
             tradeService.closePosition(trade, currentPrice, "🚀 Hard Take Profit 2.5%");
             return;
@@ -73,46 +91,76 @@ public class PositionManager {
      */
     public void handleTrailingStop(Trade trade, double currentPrice, double netProfit) {
         double best = trade.getBestPrice();
-        boolean needsUpdateOnExchange = false;
-        double newStopPrice = trade.getStopLoss();
+        double oldStopInDb = trade.getStopLoss();
+        boolean updated = false;
+        double newStop = trade.getStopLoss();
 
-        if (currentPrice > best) {
-            trade.setBestPrice(currentPrice);
-            tradeRepository.save(trade);
+        // 1. ОБНОВЛЯЕМ РЕКОРД ЦЕНЫ (Best Price)
+        if ("LONG".equals(trade.getType())) {
+            if (currentPrice > best) {
+                trade.setBestPrice(currentPrice);
+                tradeRepository.save(trade);
+                best = currentPrice;
+            }
+
+            if (netProfit >= 0.8 && netProfit < 2.0) {
+                double safeStop = trade.getEntryPrice() * 1.005;
+                if (newStop < safeStop) newStop = safeStop;
+            } else if (netProfit >= 2.0) {
+                double trailing = trade.getBestPrice() * 0.985;
+                if (newStop < trailing) newStop = trailing;
+            }
+        } else { // SHORT
+            if (currentPrice < best || best == 0) {
+                trade.setBestPrice(currentPrice);
+                updated = true;
+            }
+            if (netProfit >= 0.8 && netProfit < 2.0) {
+                double safeStop = trade.getEntryPrice() * 0.995;
+                if (newStop > safeStop) newStop = safeStop;
+            } else if (netProfit >= 2.0) {
+                double trailing = trade.getBestPrice() * 1.015;
+                if (newStop > trailing) newStop = trailing;
+            }
         }
 
-        // Логика расчета
-        if (netProfit >= 0.8 && netProfit < 2.0) {
-            double safeStop = trade.getEntryPrice() * 1.005;
-            if (newStopPrice < safeStop) {
-                newStopPrice = safeStop;
-                needsUpdateOnExchange = true;
-            }
-        } else if (netProfit >= 2.0) {
-            double activeTrailing = trade.getBestPrice() * 0.985;
-            if (newStopPrice < activeTrailing) {
-                newStopPrice = activeTrailing;
-                needsUpdateOnExchange = true;
-            }
-        }
+        // 2. БЛОК ОБНОВЛЕНИЯ ОРДЕРА НА БИРЖЕ
+        double priceChangePercent = Math.abs(newStop - trade.getStopLoss()) / trade.getStopLoss() * 100;
 
-        if (needsUpdateOnExchange) {
+        if (updated && priceChangePercent > 0.2) {
             try {
-                // 1. Отменяем старые ордера
-                binanceAPI.cancelAllOrders(trade.getAsset());
+                try {
+                    binanceAPI.cancelAllOrders(trade.getAsset());
+                } catch (Exception e) {
+                    if (e.getMessage().contains("-2011")) {
+                        System.out.println("ℹ️Ордеров для отмены не найдено (уже исполнены или отсутствуют)");
+                    } else {
+                        System.err.println("❌ Критическая ошибка при отмене: " + e.getMessage());
+                    }
+                }
+                String slSide = "LONG".equals(trade.getType()) ? "SELL" : "BUY";
+                double limitPrice = newStop * ("LONG".equals(trade.getType()) ? 0.995 : 1.005);
 
-                // 2. Ставим новый ордер
-                double limitPrice = newStopPrice * 0.995;
-                String response = binanceAPI.placeStopLossLimit(trade.getAsset(), trade.getQuantity(), newStopPrice, limitPrice);
+                String response = binanceAPI.placeStopLossLimit(trade.getAsset(), trade.getQuantity(), newStop, limitPrice, slSide);
 
                 if (response != null) {
-                    trade.setStopLoss(newStopPrice);
+                    trade.setStopLoss(newStop);
                     tradeRepository.save(trade);
-                    System.out.println("✅ SL обновлен: " + newStopPrice);
+                    System.out.println("✅ SL обновлен на бирже: " + newStop);
                 }
             } catch (Exception e) {
-                System.err.println("❌ Ошибка трейлинга: " + e.getMessage());
+                System.err.println("⚠️ Ошибка синхронизации SL: " + e.getMessage());
             }
+        }
+
+        // 3. БЛОК ПРОВЕРКИ ЗАКРЫТИЯ (Всегда вне условий обновления!)
+        // Проверяем текущую цену относительно стопа, который сохранен в БД
+        boolean triggered = "LONG".equals(trade.getType())
+                ? currentPrice <= trade.getStopLoss()
+                : currentPrice >= trade.getStopLoss();
+
+        if (triggered) {
+            tradeService.closePosition(trade, currentPrice, "🛡️ Trailing Stop Triggered");
         }
     }
 }
