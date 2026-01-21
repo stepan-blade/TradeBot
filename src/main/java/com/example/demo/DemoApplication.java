@@ -21,8 +21,8 @@ public class DemoApplication {
     @Bean
     public RestTemplate restTemplate() {
         org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(5000);
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(2000);
         return new RestTemplate(factory);
     }
 

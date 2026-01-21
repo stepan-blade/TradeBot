@@ -20,9 +20,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,6 +34,7 @@ public class BinanceAPI {
      * @see #getAccountBalance() - Баланс USDT (доступный free)
      * @see #getAssetBalance(String) - Получить баланс конкретной монеты
      * @see #getCurrentPrice(String) - Текущая цена актива (USDT)
+     * @see #getAllPrices() - Текущая цена активов (USDT)
      * @see #get24hVolume(String) - 24h объём в quote (USDT)
      * @see #getKlines(String, String, int) - Klines (свечи)
      * @see #getStepSize(String) -  Получает шаг лота (stepSize) для символа, чтобы правильно округлить количество
@@ -180,6 +179,23 @@ public class BinanceAPI {
         } catch (Exception e) {
             e.printStackTrace();
             return -1.0;
+        }
+    }
+
+    /**
+     * Текущая цена активов (USDT)
+     */
+    public Map<String, Double> getAllPrices() {
+        try {
+            // Запрос ко всем тикерам сразу: /api/v3/ticker/price
+            JsonNode response = restTemplate.getForObject(baseUrl + "/api/v3/ticker/price", JsonNode.class);
+            Map<String, Double> prices = new HashMap<>();
+            for (JsonNode node : response) {
+                prices.put(node.get("symbol").asText(), node.get("price").asDouble());
+            }
+            return prices;
+        } catch (Exception e) {
+            return Collections.emptyMap();
         }
     }
 

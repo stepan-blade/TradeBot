@@ -1,7 +1,9 @@
 package com.example.demo.services.telegram;
 
+import com.example.demo.data.BotSettings;
 import com.example.demo.data.Trade;
 import com.example.demo.interfaces.BotCommandsRepository;
+import com.example.demo.interfaces.BotSettingsRepository;
 import com.example.demo.interfaces.TradeRepository;
 import com.example.demo.services.api.BinanceAPI;
 import com.example.demo.services.api.TelegramAPI;
@@ -22,14 +24,16 @@ public class BotActiveTrades {
     private final TradeService tradeService;
     private final CalculatorService calculatorService;
     private final TradeRepository tradeRepository;
+    private final BotSettingsRepository botSettingsRepository;
 
     @Autowired
-    public BotActiveTrades(TelegramAPI telegramAPI, BinanceAPI binanceAPI, TradeService tradeService, CalculatorService calculatorService, TradeRepository tradeRepository) {
+    public BotActiveTrades(TelegramAPI telegramAPI, BinanceAPI binanceAPI, TradeService tradeService, CalculatorService calculatorService, TradeRepository tradeRepository, BotSettingsRepository botSettingsRepository) {
         this.telegramAPI = telegramAPI;
         this.binanceAPI = binanceAPI;
         this.tradeService = tradeService;
         this.calculatorService = calculatorService;
         this.tradeRepository = tradeRepository;
+        this.botSettingsRepository = botSettingsRepository;
     }
 
     /**
@@ -150,11 +154,29 @@ public class BotActiveTrades {
             case BotCommandsRepository.ACTION_EXECUTE:
                 if (!argument.isEmpty()) {
                     tradeService.closeSpecificTradeManually(argument);
+                    telegramAPI.sendMessage("Активная сделка были закрыта.");
                 }
                 break;
 
             case BotCommandsRepository.ACTION_EXECUTE_ALL:
                 tradeService.closeAllPositionsManually();
+                telegramAPI.sendMessage("Все активные сделки были закрыты.");
+                break;
+
+            case BotCommandsRepository.ACTION_SET_STATUS:
+                BotSettings botSettings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(new BotSettings());
+                String botStatus = botSettings.getStatus();
+                if ("ONLINE".equals(botStatus)) {
+                    botSettings.setStatus("OFFLINE");
+                    botSettingsRepository.save(botSettings);
+
+                    telegramAPI.sendMessage("⚠️Торговый алгоритм выключен");
+                } else {
+                    botSettings.setStatus("ONLINE");
+                    botSettingsRepository.save(botSettings);
+
+                    telegramAPI.sendMessage("✅ Торговый алгоритм включен");
+                }
                 break;
 
             case BotCommandsRepository.ACTION_CANCEL:

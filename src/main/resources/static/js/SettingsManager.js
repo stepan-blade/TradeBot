@@ -3,6 +3,7 @@ class SettingsManager {
         this.form = document.getElementById('settings-form');
         this.assetsInput = document.getElementById('assets-input');
         this.percentInput = document.getElementById('percent-input');
+        this.maxOpenTrades = document.getElementById('max_open_trades_input');
         this.gear = document.getElementById('statusGear');
 
         if (this.form) {
@@ -17,6 +18,7 @@ class SettingsManager {
             if (settings) {
                 if (this.assetsInput) this.assetsInput.value = settings.assets || "";
                 if (this.percentInput) this.percentInput.value = settings.tradePercent || "";
+                if (this.maxOpenTrades) this.maxOpenTrades.value = settings.maxOpenTrades || "";
 
                 this.updateStatusUI(settings.status);
             }
@@ -70,6 +72,7 @@ class SettingsManager {
         const formData = new FormData();
         formData.append('assets', this.assetsInput.value);
         formData.append('trade_percent', this.percentInput.value);
+        formData.append('max_open_trades', this.maxOpenTrades.value);
         formData.append('status', newStatus);
 
         try {

@@ -42,6 +42,8 @@ public class TelegramService {
             botActiveTrades.sendCloseTradeSelection();
         } else if (msg.startsWith(BotCommandsRepository.CMD_CLEAR_HISTORY)) {
             botTradeHistory.sendClearTradeHistory();
+        } else if (msg.startsWith(BotCommandsRepository.CMD_CHANGE_STATUS)) {
+            botCurrentStatus.sendResponseForChangeStatus();
         }
     }
 }

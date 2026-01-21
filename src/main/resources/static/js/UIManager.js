@@ -61,7 +61,7 @@ class UIManager {
         const icon = this.icon || document.getElementById('menuIcon');
 
         if (menu) menu.classList.remove('active');
-        if (icon) icon.classList.remove('open'); // ГАРАНТИЯ СНЯТИЯ КРЕСТИКА
+        if (icon) icon.classList.remove('open');
 
         setTimeout(() => {
             if (menu) menu.style.display = 'none';
@@ -116,7 +116,7 @@ class UIManager {
             const pnl = Number(data.totalPnl || 0);
             const pnlPerc = Number(data.totalPnlPercent || 0);
             this.totalPnlEl.innerText = `${formatValue(pnl)} $ (${formatValue(pnlPerc)}%)`;
-            this.totalPnlEl.className = `fw-bold fs-6 lh-1 ${getClass(pnl)}`;
+            this.totalPnlEl.className = `fw-bold fs-6 lh-1 ${getClass(pnlPerc)}`;
 
             if (this.totalPnlContainer) {
                 this.totalPnlContainer.style.display = data.inTrade > 0 ? 'block' : 'none';
@@ -208,8 +208,7 @@ class UIManager {
     }
 }
 window.ui = new UIManager();
+
 window.toggleMenu = () => {
-    if (window.ui) {
-        window.ui.toggleMenu();
-    }
+    if (window.ui) window.ui.toggleMenu();
 };

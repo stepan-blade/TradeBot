@@ -9,6 +9,7 @@ import com.example.demo.interfaces.TradeRepository;
 import com.example.demo.services.api.BinanceAPI;
 import com.example.demo.services.api.TelegramAPI;
 import com.example.demo.utils.FormatUtil;
+import com.example.demo.utils.TimeUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -104,19 +105,34 @@ public class TradeService {
      * @param type    "LONG" или "SHORT"
      */
     public void openPosition(String symbol, double price, double percent, String type) {
-        double availableUsdt = getBalance();
+        double availableUsdt = binanceAPI.getAccountBalance();
+        this.usdtBalance = availableUsdt;
+
         double buyUsdt = Math.min(availableUsdt * (percent / 100.0), availableUsdt);
+
         if (buyUsdt < 10.0) {
-            logger.warn("Недостаточно USDT для открытия {} ({})", symbol, type);
+            logger.warn("Пропуск: На бирже {} USDT. Минимум 10.0 USDT", availableUsdt);
             return;
         }
 
         double stepSize = binanceAPI.getStepSize(symbol);
         double rawQuantity = buyUsdt / price;
-        double quantity = FormatUtil.roundToStep(rawQuantity, stepSize);
+        int precision = 0;
 
-        // Отмена старых ордеров перед открытием
-        binanceAPI.cancelAllOrders(symbol);
+        if (stepSize < 1) {
+            precision = (int) Math.round(-Math.log10(stepSize));
+        }
+
+        java.math.BigDecimal bd = new java.math.BigDecimal(String.valueOf(rawQuantity));
+        bd = bd.setScale(precision, java.math.RoundingMode.DOWN);
+        double quantity = bd.doubleValue();
+        logger.info("Расчет quantity: Raw={}, Step={}, Precision={}, Final={}", rawQuantity, stepSize, precision, quantity);
+
+        try {
+            binanceAPI.cancelAllOrders(symbol);
+        } catch (Exception e) {
+            System.out.println(TimeUtil.getTime() + " --- [BINANCE API] Ордеров для закрытия не найдено");
+        }
 
         String orderId = null;
         try {
@@ -215,14 +231,17 @@ public class TradeService {
      * @param reason Причина продажи
      */
     public void closePosition(Trade trade, double currentPrice, String reason) {
-        // Отмена всех ордеров перед закрытием
-        binanceAPI.cancelAllOrders(trade.getAsset());
+        try {
+            binanceAPI.cancelAllOrders(trade.getAsset());
+        } catch (Exception e) {
+            System.out.println(TimeUtil.getTime() + " --- [BINANCE API] Ордеров для закрытия не найдено");
+        }
 
         double quantity = trade.getQuantity();
         if (quantity <= 0) {
             quantity = binanceAPI.getAssetBalance(trade.getAsset().replace("USDT", ""));
             if (quantity <= 0) {
-                logger.error("Не удалось закрыть {}: quantity = 0 на бирже", trade.getAsset());
+                logger.error("Не удалось закрыть {}: количество монет на бирже - 0", trade.getAsset());
                 return;
             }
         }
@@ -240,7 +259,7 @@ public class TradeService {
         }
 
         if (orderId == null) {
-            telegramAPI.sendMessage("❌ Не удалось закрыть позицию " + trade.getAsset());
+            telegramAPI.sendMessage("❌ Не удалось закрыть позицию " + trade.getAsset() + ". Возможно, позиция была закрыта вручную");
             return;
         }
 
@@ -272,7 +291,11 @@ public class TradeService {
      * Внутренний метод для закрытия сделки ТОЛЬКО в базе (без отправки ордера)
      */
     public void closePositionInDB(Trade trade, double exitPrice, String reason) {
-        binanceAPI.cancelAllOrders(trade.getAsset());
+        try {
+            binanceAPI.cancelAllOrders(trade.getAsset());
+        } catch (Exception e) {
+            System.out.println(TimeUtil.getTime() + " --- [BINANCE API] Ордеров для закрытия не найдено");
+        }
 
         double netProfitPercent = calculatorService.getNetResultPercent(trade.getEntryPrice(), exitPrice, trade.getAsset(), trade.getType());
         double profitUsdt = trade.getVolume() * (netProfitPercent / 100.0);
@@ -287,7 +310,11 @@ public class TradeService {
 
         coolDownMap.put(trade.getAsset(), LocalDateTime.now().plusMinutes(cooldownMinutes));
 
-        telegramAPI.sendMessage(String.format("🔔 Синхронизация: %s закрыта биржей (%s)\nИтог: %.2f$ (%.2f%%)",
+        telegramAPI.sendMessage(String.format(
+                "🔔 Синхронизация\n " +
+                        "Актив: %s \n" +
+                        "Закрыт биржей: (%s)\n" +
+                        "Итог: %.2f$ (%.2f%%)",
                 trade.getAsset(), reason, profitUsdt, netProfitPercent));
     }
 

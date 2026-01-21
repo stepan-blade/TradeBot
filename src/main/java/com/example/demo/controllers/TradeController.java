@@ -30,7 +30,7 @@ public class TradeController {
      * @see #clearHistory() - Удаляет все завершенные сделки из базы данных.
      * @see #closeSpecificTrade(String) -  Выполняет принудительное закрытие конкретной активной сделки по запросу пользователя.
      * @see #getSettings() - Извлекает глобальные настройки бота из базы данных.
-     * @see #saveSettings(String, String, String)  - Обновляет конфигурацию торгового алгоритма.
+     * @see #saveSettings(String, String, String, String)   - Обновляет конфигурацию торгового алгоритма.
      * @see #previewClose(String) - Предварительный расчет финансового результата перед закрытием сделки.
      */
 
@@ -195,9 +195,11 @@ public class TradeController {
     public ResponseEntity<?> saveSettings(
             @RequestParam("assets") String assets,
             @RequestParam("trade_percent") String tradePercentStr,
-            @RequestParam("status") String status) {
+            @RequestParam("status") String status,
+            @RequestParam(value = "max_open_trades", defaultValue = "3") String maxOpenStr) {
         try {
             double tradePercent = Double.parseDouble(tradePercentStr);
+            int maxOpen = Integer.parseInt(maxOpenStr);
 
             BotSettings settings = settingsRepository.findById("MAIN_SETTINGS")
                     .orElse(new BotSettings());
@@ -205,11 +207,13 @@ public class TradeController {
             settings.setAssets(assets);
             settings.setTradePercent(tradePercent);
             settings.setStatus(status);
+            settings.setMaxOpenTrades(maxOpen);
             settingsRepository.save(settings);
 
             System.out.println("✅ Настройки успешно обновлены: \n" +
                     "Список доступных для торговли активов: " + assets + "\n" +
-                    "Процент торговых сделок от баланса: " + tradePercent + "%");
+                    "Процент торговых сделок от баланса: " + tradePercent + "%\n" +
+                    "Максимальное количество сделок единовременно: " + maxOpen);
             return ResponseEntity.ok().body(Map.of("status", "success"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Ошибка: " + e.getMessage());

@@ -17,16 +17,17 @@ class BinanceBotApp {
     }
 
     async init() {
-        // Слушатель для меню-бургера
         const menuIcon = document.getElementById('menuIcon');
         if (menuIcon) menuIcon.onclick = () => this.ui.toggleMenu();
 
-        // Слушатель для переключения видов (OPEN/CLOSED)
         const selector = document.getElementById('view-selector');
         if (selector) selector.onchange = (e) => this.changeView(e.target.value);
 
         await this.updateDashboard();
-        setInterval(_.debounce(() => this.updateDashboard(), 2000, {leading: true}), 2000);
+
+        setInterval(async () => {
+            await this.updateDashboard();
+        }, 2000);
     }
 
     changeView(val) {
@@ -106,9 +107,9 @@ class BinanceBotApp {
             const profitText = data.profitUsdt >= 0 ? `+${data.profitUsdt}` : `${data.profitUsdt}`;
             const emoji = data.profitUsdt >= 0 ? "✅" : "⚠️";
 
-            const confirmMsg = `Закрыть позицию ${symbol}?\n\n` +
+            const confirmMsg = `${symbol} Закрыть позицию?\n\n` +
                 `Текущая цена: ${data.currentPrice}\n` +
-                `Ожидаемый профит: ${profitText} $ (${data.percent}%)\n` +
+                `Ожидаемый PNL: ${profitText} $ (${data.percent}%)\n` +
                 `С учетом комиссии ${data.feePercent}% ${emoji}`;
 
             if (confirm(confirmMsg)) {
@@ -127,3 +128,9 @@ class BinanceBotApp {
 }
 
 window.app = new BinanceBotApp();
+
+window.toggleMenu = () => {
+    if (window.app && window.app.ui) {
+        window.app.ui.toggleMenu();
+    }
+};
