@@ -10,6 +10,16 @@ import java.util.List;
 @Service
 public class IndicatorService {
 
+    /**
+     * @see #calculateRSI(List, int) - Функция расчета RSI 
+     * @see #calculateSMA(List, int) - Функция расчета SMA 
+     * @see #calculateBollingerBands(List, int, double) - Функция расчета линий Болинджера 
+     * @see #calculateATR(List, int) - Рассчитывает показатель ATR (Average True Range) для предоставленного списка свечей. 
+     * @see #calculateEMA(List, int) - Рассчитывает экспоненциальную скользящую среднюю (EMA). 
+     * @see #calculateAverageAtr(String) - Вычисляет среднее значение индикатора ATR за последние 30 дней. 
+     * @see #calculateMACD(List, int, int, int) - Рассчитывает индикатор MACD (Moving Average Convergence Divergence). 
+     * @see #calculateEMAForMACD(List, int, int, int) - Рассчитывает EMA для сигнальной линии MACD на основе серии MACD значений. 
+     */
     private final BinanceAPI binanceAPI;
 
     @Autowired
@@ -18,10 +28,14 @@ public class IndicatorService {
     }
 
     /**
-     * Функция расчета RSI
-     * @param klines Свечи
-     * @param period Период
-     * @return Показатель
+     * Вычисляет индекс относительной силы (Relative Strength Index, RSI).
+     * * RSI измеряет скорость и изменение ценовых движений, варьируясь от 0 до 100.
+     * Традиционно значения выше 70 считаются состоянием "перекупленности",
+     * а ниже 30 — "перепроданности".
+     *
+     * @param klines Список исторических данных (свечей), где индекс [3] — цена закрытия (Close).
+     * @param period Количество последних свечей для анализа (стандартное значение — 14).
+     * @return Значение RSI от 0.0 до 100.0. Если данных недостаточно, возвращает 50.0 (нейтральное).
      */
     public double calculateRSI(List<double[]> klines, int period) {
         if (klines.size() < period + 1) return 50.0;
@@ -38,10 +52,13 @@ public class IndicatorService {
     }
 
     /**
-     * Функция расчета SMA
-     * @param klines Свечи
-     * @param period Период
-     * @return Показатель
+     * Вычисляет простое скользящее среднее (Simple Moving Average, SMA).
+     * * Метод суммирует цены закрытия за указанный период и делит их на количество свечей.
+     * Помогает определить общее направление тренда, фильтруя рыночный шум.
+     *
+     * @param klines Список свечей, где индекс [3] соответствует цене закрытия.
+     * @param period Окно усреднения (например, 20, 50 или 200 для долгосрочных трендов).
+     * @return Среднее арифметическое цен закрытия за период. Если данных недостаточно, возвращает 0.
      */
     public double calculateSMA(List<double[]> klines, int period) {
         if (klines.size() < period) return 0;
@@ -53,11 +70,20 @@ public class IndicatorService {
     }
 
     /**
-     * Функция расчета линий Болинджера
-     * @param klines Свечи
-     * @param period Период
-     * @param k Коэффициент отклонения
-     * @return Показатель
+     * Вычисляет линии Боллинджера (Bollinger Bands).
+     * * Индикатор состоит из трех линий:
+     * 1. Средняя линия (Middle Band) — это SMA.
+     * 2. Верхняя линия (Upper Band) — SMA плюс K стандартных отклонений.
+     * 3. Нижняя линия (Lower Band) — SMA минус K стандартных отклонений.
+     * * Сужение полос говорит о низкой волатильности, расширение — о высокой.
+     *
+     * @param klines Список свечей, где индекс [3] — цена закрытия.
+     * @param period Период для расчета скользящей средней и стандартного отклонения (обычно 20).
+     * @param k Коэффициент отклонения (обычно 2.0), определяющий ширину полос.
+     * @return Массив из 3-х элементов типа double:
+     * [0] - Верхняя граница (Upper Band)
+     * [1] - Средняя линия (SMA)
+     * [2] - Нижняя граница (Lower Band)
      */
     public double[] calculateBollingerBands(List<double[]> klines, int period, double k) {
         if (klines.size() < period) return new double[]{0, 0, 0};

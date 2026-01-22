@@ -95,16 +95,14 @@ class SettingsManager {
         btn.setAttribute('data-status', status);
 
         if (status === 'ONLINE') {
-            // Состояние: Бот РАБОТАЕТ -> Кнопка ОТКЛЮЧИТЬ (Красная)
-            btn.innerHTML = '<i class="bi bi-power me-1"></i> Отключить';
-            btn.className = 'btn btn-outline-danger-custom btn-sm px-4 py-2';
+            btn.innerHTML = '<i class="bi bi-power"></i>';
+            btn.className = 'btn btn-outline-danger-custom';
 
             text.textContent = 'Бот активен и сканирует рынок';
             text.className = 'text-success-light';
         } else {
-            // Состояние: Бот ВЫКЛЮЧЕН -> Кнопка ВКЛЮЧИТЬ (Зеленая)
-            btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Включить';
-            btn.className = 'btn btn-outline-success-custom btn-sm px-4 py-2';
+            btn.innerHTML = '<i class="bi bi-power"></i>';
+            btn.className = 'btn btn-outline-success-custom';
 
             text.textContent = 'Бот остановлен (пассивный режим)';
             text.className = 'text-danger-light';

@@ -85,7 +85,7 @@ public class PositionManager {
         }
 
         // Hard TP снижен до 1% для малой прибыли
-        if (netProfit >= 1.0) {
+        if (netProfit >= 2.0) {
             tradeService.closePosition(trade, currentPrice, "🚀 Quick Take Profit 1%");
             return;
         }
@@ -115,11 +115,11 @@ public class PositionManager {
                 tradeRepository.save(trade);
             }
 
-            if (netProfit >= 0.5 && netProfit < 1.0) { // Снижен для безубытка
+            if (netProfit >= 0.5 && netProfit < 1.0) {
                 double safeStop = trade.getEntryPrice() * 1.003;
                 if (newStop < safeStop) newStop = safeStop;
-            } else if (netProfit >= 1.0) { // Трейлинг 1%
-                double trailing = trade.getBestPrice() * 0.99; // 1% от пика
+            } else if (netProfit >= 1.0) {
+                double trailing = trade.getBestPrice() * 0.99;
                 if (newStop < trailing) newStop = trailing;
             }
         } else {
@@ -137,7 +137,6 @@ public class PositionManager {
             }
         }
 
-        // Обновляем SL на бирже если изменился >0.2%
         double priceChangePercent = Math.abs(newStop - trade.getStopLoss()) / trade.getStopLoss() * 100;
         if (priceChangePercent > 0.2) {
             try {
@@ -153,7 +152,6 @@ public class PositionManager {
             }
         }
 
-        // Проверка триггера
         boolean triggered = "LONG".equals(trade.getType())
                 ? currentPrice <= trade.getStopLoss()
                 : currentPrice >= trade.getStopLoss();

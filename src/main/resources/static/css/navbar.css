@@ -5,16 +5,52 @@
     border: 1px solid #333 !important;
     overflow: hidden;
 }
-.uppercase-tracking { text-transform: uppercase; letter-spacing: 2px; font-size: 1.1rem; }
 
-.menu-btn-container { position: relative; z-index: 1100; }
-.menu-icon { width: 24px; height: 18px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; }
-.menu-icon span { display: block; height: 2px; width: 100%; background-color: #ffffff; border-radius: 2px; transition: 0.3s; }
-.menu-icon span:nth-child(2) { width: 75%; align-self: flex-end; }
+.uppercase-tracking {
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 1.1rem;
+}
 
-.menu-icon.open span:nth-child(1) { transform: translateY(8px) rotate(45deg); }
-.menu-icon.open span:nth-child(2) { opacity: 0; }
-.menu-icon.open span:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+.menu-btn-container {
+    position: relative;
+    z-index: 1100;
+}
+
+.menu-icon {
+    width: 24px;
+    height: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+.menu-icon span {
+    display: block;
+    height: 2px;
+    width: 100%;
+    background-color: #ffffff;
+    border-radius: 2px;
+    transition: 0.3s;
+}
+
+.menu-icon span:nth-child(2) {
+    width: 75%;
+    align-self: flex-end;
+}
+
+.menu-icon.open span:nth-child(1) {
+    transform: translateY(8px) rotate(45deg);
+}
+
+.menu-icon.open span:nth-child(2) {
+    opacity: 0;
+}
+
+.menu-icon.open span:nth-child(3) {
+    transform: translateY(-8px) rotate(-45deg);
+}
 
 .glass-menu {
     position: fixed;
@@ -52,8 +88,20 @@
 }
 
 .glass-item {
-    display: flex; align-items: center; padding: 15px 20px; margin-bottom: 10px;
-    color: white; text-decoration: none; font-size: 1.1rem; border-radius: 12px;
-    transition: all 0.2s ease; background: rgba(255, 255, 255, 0.03);
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    margin-bottom: 10px;
+    color: white;
+    text-decoration: none;
+    font-size: 1.1rem;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.03);
 }
-.glass-item:hover { background: rgba(255, 255, 255, 0.1); color: #00ff88; transform: translateX(5px); }
+
+.glass-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #00ff88;
+    transform: translateX(5px);
+}

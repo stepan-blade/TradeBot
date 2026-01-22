@@ -79,15 +79,6 @@ public class TradeService {
         }
     }
 
-    private void updateBalanceFromExchange() {
-        try {
-            this.usdtBalance = binanceAPI.getAccountBalance();
-        } catch (Exception e) {
-            logger.error("Ошибка инициализации баланса: {}", e.getMessage());
-            this.usdtBalance = 0.0;
-        }
-    }
-
     /**
      * Текущий остаток USDT на счете Binance
      * @return Остаток USDT на счете Binance
@@ -95,6 +86,15 @@ public class TradeService {
     public double getBalance() {
         updateBalanceFromExchange();
         return usdtBalance;
+    }
+
+    private void updateBalanceFromExchange() {
+        try {
+            this.usdtBalance = binanceAPI.getAccountBalance();
+        } catch (Exception e) {
+            logger.error("Ошибка инициализации баланса: {}", e.getMessage());
+            this.usdtBalance = 0.0;
+        }
     }
 
     /**
@@ -212,7 +212,15 @@ public class TradeService {
         updateBalanceFromExchange();
 
         String startTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm"));
-        Trade trade = new Trade(symbol, startTime, price, type, buyUsdt, actualQuantity, ("LONG".equals(type) ? price * 0.98 : price * 1.02));
+        Trade trade = new Trade(
+                symbol,
+                startTime,
+                price,
+                type,
+                buyUsdt,
+                actualQuantity,
+                ("LONG".equals(type) ? price * 0.98 : price * 1.02)
+        );
         tradeRepository.save(trade);
 
         telegramAPI.sendMessage(String.format("""

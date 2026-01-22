@@ -69,6 +69,26 @@ class UIManager {
         document.body.style.overflow = 'auto';
     }
 
+    // Открытие и закрытие секции управления системой
+    toggleAdminPanel() {
+        const content = document.getElementById('adminPanelContent');
+        const chevron = document.getElementById('adminChevron');
+
+        content.classList.toggle('show');
+        chevron.classList.toggle('rotate');
+    }
+
+    // Открытие и закрытие секции параметров торговли
+    toggleSettingsPanel() {
+        const content = document.getElementById('settingsPanelContent');
+        const chevron = document.getElementById('settingsChevron');
+
+        if (content && chevron) {
+            const isOpen = content.classList.toggle('show');
+            chevron.classList.toggle('rotate', isOpen);
+        }
+    }
+
     // Основной метод обновления всей статистики
     updateHeaderStats(data) {
         if (!data) return;
@@ -157,32 +177,42 @@ class UIManager {
             return;
         }
 
-        section.style.display = 'block';
+        section.style.display = 'flex';
+        section.style.flexWrap = 'wrap';
+        section.style.gap = '0.5rem';
 
         entries.forEach(([symbol, time]) => {
             const shortName = symbol.replace('USDT', '');
 
             const badge = document.createElement('div');
-            badge.className = 'badge bg-warning text-dark rounded-pill px-4 py-3 d-flex align-items-center gap-3 fs-6';
+            badge.className = 'd-flex align-items-center gap-2 px-3 py-2 rounded-4 text-light';
+            badge.style.background = 'rgba(18, 18, 18, 0.6)';
+            badge.style.backdropFilter = 'blur(15px)';
+            badge.style.webkitBackdropFilter = 'blur(15px)';
+            badge.style.border = '1px solid #333';
+            badge.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+
             badge.innerHTML = `
-            <i class="bi bi-clock-fill fs-4"></i>
-            <div>
-                <strong>${shortName}</strong><br>
-                <small>до ${time}</small>
+            <div class="d-flex align-items-center justify-content-center" 
+                 style="width: 20px; height: 20px; opacity: 0.8;">
+                <i class="bi bi-clock-fill text-warning" style="font-size: 0.85rem;"></i>
+            </div>
+            <div class="d-flex flex-column" style="line-height: 1.1;">
+                <span class="fw-bold" style="font-size: 0.9rem; letter-spacing: 0.5px;">${shortName}</span>
+                <span class="text-muted" style="font-size: 0.65rem; opacity: 0.6;">до ${time}</span>
             </div>
         `;
             list.appendChild(badge);
         });
     }
 
+    //Обновление статуса торгового алгоритма
     updateBotStatus(status) {
-        // Находим контейнер статуса (правая карточка в верхнем ряду)
         const statusWrapper = document.querySelector('.col-6 .card .mb-2');
         if (!statusWrapper) return;
 
         const isOnline = status === 'ONLINE';
 
-        // Полностью обновляем содержимое блока статуса
         statusWrapper.innerHTML = `
         <div class="stat-label mb-1">Статус бота</div>
         <div class="d-flex align-items-center bg-dark px-2 py-1 rounded-pill w-fit-content" style="width: fit-content;">
@@ -194,7 +224,6 @@ class UIManager {
         </div>
     `;
 
-        // Опционально: Обновляем текст в шапке (SYSTEM ACTIVE / SYSTEM PAUSED)
         const systemSubtext = document.querySelector('.navbar .text-info.small');
         if (systemSubtext) {
             if (isOnline) {
@@ -211,4 +240,8 @@ window.ui = new UIManager();
 
 window.toggleMenu = () => {
     if (window.ui) window.ui.toggleMenu();
+};
+
+window.toggleAdminPanel = () => {
+    if (window.ui) window.ui.toggleAdminPanel();
 };

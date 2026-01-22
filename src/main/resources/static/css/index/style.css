@@ -1,4 +1,9 @@
-body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+body {
+    background-color: #121212;
+    color: #ffffff;
+    font-family: 'Segoe UI', sans-serif;
+    overflow-x: hidden;
+}
 
 /* Карточки */
 .card {
@@ -101,19 +106,19 @@ td[style*="color: #aaaaaa"] {
 }
 
 @media (max-width: 576px) {
-    /* Уменьшаем padding у контейнера, чтобы освободить место */
     .card.p-0.p-md-4.mb-4 .p-3 {
         padding: 10px !important;
     }
 
-    /* Делаем шрифт селектора чуть меньше для мобильных */
     #view-selector {
         padding-left: 8px;
         padding-right: 25px;
     }
 }
 
-.table-hover tbody tr:hover td { background-color: #383838 !important; }
+.table-hover tbody tr:hover td {
+    background-color: #383838 !important;
+}
 
 .sortable {
     position: relative;
@@ -155,4 +160,10 @@ td[style*="color: #aaaaaa"] {
 
 #cooldown-section h5 {
     opacity: 0.9;
+}
+
+.cooldown-badge-hover:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    transition: all 0.2s ease;
 }

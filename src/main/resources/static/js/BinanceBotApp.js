@@ -107,7 +107,7 @@ class BinanceBotApp {
             const profitText = data.profitUsdt >= 0 ? `+${data.profitUsdt}` : `${data.profitUsdt}`;
             const emoji = data.profitUsdt >= 0 ? "✅" : "⚠️";
 
-            const confirmMsg = `${symbol} Закрыть позицию?\n\n` +
+            const confirmMsg = `Закрыть позицию ${symbol} ?\n\n` +
                 `Текущая цена: ${data.currentPrice}\n` +
                 `Ожидаемый PNL: ${profitText} $ (${data.percent}%)\n` +
                 `С учетом комиссии ${data.feePercent}% ${emoji}`;
