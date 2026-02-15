@@ -38,44 +38,37 @@ public class PositionManager {
     }
 
     /**
-     * Основной обработчик условий выхода из сделки по техническим и фиксированным параметрам.
-     * <p>
-     * Метод анализирует состояние текущей сделки по трем направлениям:
-     * 1. Импульс (RSI): Если актив перекуплен (RSI > 75) на минутном графике, позиция закрывается для фиксации локального пика.
-     * 2. Жесткий лимит (Hard Take Profit): Если чистая прибыль достигла 2.5%, сделка закрывается автоматически.
-     * 3. Динамическая защита: Если условия выше не выполнены, управление передается трейлинг-стопу.
-     * @param trade Объект активной сделки из базы данных.
-     * @param currentPrice Текущая рыночная цена актива.
+     * Основной обработчик условий выхода из сделки.
      */
     public void handleTradeStop(Trade trade, double currentPrice) {
         double netProfit = calculatorService.getNetResultPercent(
                 trade.getEntryPrice(), currentPrice, trade.getAsset(), trade.getType()
         );
 
-        // Таймер на сделку — если >30 мин и profit <0.5% — exit
+        // Таймер: 120 мин если profit <0% (удлинен)
         LocalDateTime entryTime = LocalDateTime.parse(trade.getEntryTime(), DateTimeFormatter.ofPattern("dd.MM.yyyy | HH:mm"));
         long minutesHeld = ChronoUnit.MINUTES.between(entryTime, LocalDateTime.now());
-        if (minutesHeld > 30 && netProfit < 0.5) {
+        if (minutesHeld > 120 && netProfit < 0) {
             tradeService.closePosition(trade, currentPrice, "⏰ Time Limit Exit");
             return;
         }
 
-        // Выход по RSI — на 1m для скорости (скальпинг)
-        List<double[]> klines = binanceAPI.getKlines(trade.getAsset(), "1m", 15);
+        // RSI выход: строже (80+ for LONG, >1% profit)
+        List<double[]> klines = binanceAPI.getKlines(trade.getAsset(), "15m", 15); // 15m
         double rsi = indicatorService.calculateRSI(klines, 14);
 
         boolean rsiExit = false;
         String rsiReason = "";
 
         if ("LONG".equals(trade.getType())) {
-            if (rsi > 70 && netProfit > 0.3) {
+            if (rsi > 80 && netProfit > 1.0) {
                 rsiExit = true;
-                rsiReason = "💰 RSI Quick Exit (70+)";
+                rsiReason = "💰 RSI Exit (80+)";
             }
         } else {
-            if (rsi < 30 && netProfit > 0.3) {
+            if (rsi < 20 && netProfit > 1.0) {
                 rsiExit = true;
-                rsiReason = "💰 RSI Quick Exit (30-)";
+                rsiReason = "💰 RSI Exit (20-)";
             }
         }
 
@@ -84,9 +77,9 @@ public class PositionManager {
             return;
         }
 
-        // Hard TP снижен до 1% для малой прибыли
-        if (netProfit >= 2.0) {
-            tradeService.closePosition(trade, currentPrice, "🚀 Quick Take Profit 1%");
+        // Hard TP: 3%
+        if (netProfit >= 3.0) {
+            tradeService.closePosition(trade, currentPrice, "🚀 Take Profit 3%");
             return;
         }
 
@@ -94,20 +87,14 @@ public class PositionManager {
     }
 
     /**
-     * Логика динамического перемещения уровня Stop-Loss (Трейлинг-стоп).
-     * <p>
-     * Метод реализует ступенчатую защиту прибыли:
-     * 1. Сохранение пика: Обновляет в базе данных значение 'bestPrice', если цена поставила новый рекорд.
-     * 2. Уровень "Безубыток+": При достижении профита 0.8%, стоп-лосс переносится в зону профита (+0.5% от входа).
-     * 3. Активный трейлинг: При профите выше 2.0%, стоп-лосс начинает следовать за ценой на расстоянии 1.5% от пика.
-     * 4. Исполнение: Если текущая цена касается или падает ниже рассчитанного стоп-лосса, сделка закрывается.
-     * @param trade Объект активной сделки.
-     * @param currentPrice Текущая рыночная цена актива.
-     * @param netProfit    Текущая доходность сделки в процентах.
+     * Динамический trailing stop на ATR.
      */
     public void handleTrailingStop(Trade trade, double currentPrice, double netProfit) {
         double best = trade.getBestPrice();
         double newStop = trade.getStopLoss();
+
+        List<double[]> klines = binanceAPI.getKlines(trade.getAsset(), "15m", 14);
+        double atr = indicatorService.calculateATR(klines, 14);
 
         if ("LONG".equals(trade.getType())) {
             if (currentPrice > best) {
@@ -115,11 +102,8 @@ public class PositionManager {
                 tradeRepository.save(trade);
             }
 
-            if (netProfit >= 0.5 && netProfit < 1.0) {
-                double safeStop = trade.getEntryPrice() * 1.003;
-                if (newStop < safeStop) newStop = safeStop;
-            } else if (netProfit >= 1.0) {
-                double trailing = trade.getBestPrice() * 0.99;
+            if (netProfit >= 1.5) {
+                double trailing = trade.getBestPrice() - (2 * atr); // 2*ATR trail
                 if (newStop < trailing) newStop = trailing;
             }
         } else {
@@ -128,15 +112,13 @@ public class PositionManager {
                 tradeRepository.save(trade);
             }
 
-            if (netProfit >= 0.5 && netProfit < 1.0) {
-                double safeStop = trade.getEntryPrice() * 0.997;
-                if (newStop > safeStop) newStop = safeStop;
-            } else if (netProfit >= 1.0) {
-                double trailing = trade.getBestPrice() * 1.01;
+            if (netProfit >= 1.5) {
+                double trailing = trade.getBestPrice() + (2 * atr);
                 if (newStop > trailing) newStop = trailing;
             }
         }
 
+        // Update SL if changed >0.2%
         double priceChangePercent = Math.abs(newStop - trade.getStopLoss()) / trade.getStopLoss() * 100;
         if (priceChangePercent > 0.2) {
             try {

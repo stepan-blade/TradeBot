@@ -32,12 +32,19 @@ public class TelegramAPI {
     private Integer confirmationMessageId;
     private String latestCallbackData;
 
+    @Value("${web.app.base.url:https://your-ngrok-url.ngrok-free.app}")
+    private String webAppBaseUrl;
+
     @Autowired
     public TelegramAPI(
             @Value("${telegram.bot.token}") String botToken,
             @Value("${telegram.chat.id}") String chatId) {
         this.CHAT_ID = chatId;
         this.API_URL = "https://api.telegram.org/bot" + botToken;
+    }
+
+    public String getChatId() {
+        return CHAT_ID;
     }
 
     /**
@@ -121,6 +128,45 @@ public class TelegramAPI {
                         "text", text,
                         "parse_mode",
                         "HTML",
+                        "reply_markup", markup),
+                true);
+    }
+
+    /**
+     * Отправка сообщения с кнопкой, открывающей веб-приложение
+     * @param text - Текст сообщения
+     * @param buttonText - Текст кнопки
+     * @param url - URL веб-приложения
+     */
+    public void sendMessageWithWebAppButton(String text, String buttonText, String url) {
+        String webUrl = webAppBaseUrl + "/settings";
+        Map<String, Object> webApp = Map.of("type", "open", "url", webUrl);
+        Map<String, Object> button = Map.of("text", buttonText, "web_app", webApp);
+        Map<String, Object> markup = Map.of("inline_keyboard", List.of(List.of(button)));
+        sendRequest("/sendMessage", Map.of(
+                        "chat_id", CHAT_ID,
+                        "text", text,
+                        "parse_mode", "HTML",
+                        "reply_markup", markup),
+                true);
+    }
+
+    /**
+     * Отправка сообщения с несколькими inline-кнопками
+     * @param text Текст сообщения
+     * @param buttons Список Map с text и callback_data для каждой кнопки
+     */
+    public void sendMessageWithInlineButtons(String text, List<Map<String, String>> buttons) {
+        List<List<Map<String, Object>>> keyboard = new ArrayList<>();
+        for (Map<String, String> btn : buttons) {
+            Map<String, Object> button = Map.of("text", btn.get("text"), "callback_data", btn.get("callback_data"));
+            keyboard.add(List.of(button));
+        }
+        Map<String, Object> markup = Map.of("inline_keyboard", keyboard);
+        sendRequest("/sendMessage", Map.of(
+                        "chat_id", CHAT_ID,
+                        "text", text,
+                        "parse_mode", "HTML",
                         "reply_markup", markup),
                 true);
     }

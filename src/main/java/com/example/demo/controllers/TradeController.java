@@ -45,10 +45,10 @@ public class TradeController {
     public TradeController(BinanceAPI binanceAPI, TradeService tradeService, TradeRepository tradeRepository, BotSettingsRepository settingsRepository, BalanceHistoryRepository balanceHistoryRepository, CalculatorService calculatorService) {
         this.binanceAPI = binanceAPI;
         this.tradeService = tradeService;
+        this.calculatorService = calculatorService;
         this.tradeRepository = tradeRepository;
         this.settingsRepository = settingsRepository;
         this.balanceHistoryRepository = balanceHistoryRepository;
-        this.calculatorService = calculatorService;
     }
 
     /**
@@ -64,6 +64,11 @@ public class TradeController {
      */
     @GetMapping("/status")
     public Map<String, Object> getStatus() {
+        BotSettings settings = settingsRepository.findById("MAIN_SETTINGS").orElse(null);
+        if (settings != null && "OFFLINE".equals(settings.getStatus())) {
+            return new HashMap<>(); // Не выполнять запросы, если бот выключен
+        }
+
         Map<String, Object> status = new HashMap<>();
 
         double balance = tradeService.getBalance();
@@ -84,6 +89,7 @@ public class TradeController {
         status.put("todayProfitUSDT", calculatorService.getTodayProfitUSDT());
         status.put("todayProfitPercent", calculatorService.getTodayProfitPercent());
 
+        status.put("allProfitUsdt", calculatorService.getRealizedProfit() + calculatorService.getUnrealizedPnLUsdt());
         status.put("allProfitPercent", calculatorService.getAllProfitPercent());
 
         status.put("unrealizedPnLUsdt", calculatorService.getUnrealizedPnLUsdt());
@@ -150,6 +156,11 @@ public class TradeController {
      */
     @PostMapping("/close-trade")
     public ResponseEntity<String> closeSpecificTrade(@RequestParam String symbol) {
+        BotSettings settings = settingsRepository.findById("MAIN_SETTINGS").orElse(null);
+        if (settings != null && "OFFLINE".equals(settings.getStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Бот выключен. Запросы к бирже запрещены.");
+        }
+
         Optional<Trade> tradeOpt = tradeService.getActiveTrades().stream()
                 .filter(t -> t.getAsset().equals(symbol))
                 .findFirst();
@@ -231,7 +242,12 @@ public class TradeController {
      * @return Объект с потенциальным профитом в USDT и процентах.
      */
     @GetMapping("/preview-close")
-    public ResponseEntity<Map<String, Object>> previewClose(@RequestParam String symbol) {
+    public ResponseEntity<Map<String, Object> > previewClose(@RequestParam String symbol) {
+        BotSettings settings = settingsRepository.findById("MAIN_SETTINGS").orElse(null);
+        if (settings != null && "OFFLINE".equals(settings.getStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new HashMap<>());
+        }
+
         Optional<Trade> tradeOpt = tradeRepository.findAll().stream()
                 .filter(t -> t.getAsset().equals(symbol) && "OPEN".equals(t.getStatus()))
                 .findFirst();

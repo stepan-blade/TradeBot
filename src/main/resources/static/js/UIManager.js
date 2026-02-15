@@ -5,15 +5,15 @@ class UIManager {
         this.overlay = document.getElementById('saveOverlay');
         this.audioCtx = null;
 
-        // Биндим контекст, чтобы 'this' всегда указывал на UIManager
+        // Биндим контекст
         this.toggleMenu = this.toggleMenu.bind(this);
         this.closeMenu = this.closeMenu.bind(this);
         this.openMenu = this.openMenu.bind(this);
 
-        // Кэшируем элементы один раз при запуске
+        // Кэшируем элементы
         this.balanceEl = document.getElementById('balance-val');
         this.inTradeEl = document.getElementById('in-trade-val');
-        this.percentChangeEl = document.getElementById('percent-change');
+        this.percentChangeEl = document.getElementById('percent-change'); // это контейнер под балансом
         this.todayProfitEl = document.getElementById('today-profit-val');
         this.totalPnlEl = document.getElementById('total-pnl-val');
         this.totalPnlContainer = document.getElementById('total-pnl-container');
@@ -101,8 +101,8 @@ class UIManager {
         };
 
         const getClass = (num) => {
-            if (num > 0) return 'profit-pos';
-            if (num < 0) return 'profit-neg';
+            if (num > 0) return 'text-success';
+            if (num < 0) return 'text-danger';
             return 'text-white';
         };
 
@@ -111,11 +111,21 @@ class UIManager {
             this.balanceEl.innerText = `${Number(data.balance || 0).toFixed(6)} USDT`;
         }
 
-        // 2. Общий процент роста
+        // 2. Общий процент роста / PnL под балансом — ИСПРАВЛЕННЫЙ БЛОК
         if (this.percentChangeEl) {
-            const perc = Number(data.calculatedPercent || 0);
-            this.percentChangeEl.innerText = formatValue(perc) + '%';
-            this.percentChangeEl.className = `fw-bold fs-6 mb-3 ${getClass(perc)}`;
+            const pnl = Number(data.totalPnl || 0);        // сумма PnL в $
+            const perc = Number(data.totalPnlPercent || 0); // процент
+
+            const sign = pnl >= 0 ? '+' : '';
+            const pnlText = `${sign}${pnl.toFixed(2)} $`;
+            const percText = `(${sign}${perc.toFixed(2)}%)`;
+
+            const colorClass = getClass(pnl);
+
+            this.percentChangeEl.innerHTML = `
+                <span class="${colorClass}">${pnlText}</span> 
+                <span class="${colorClass}">${percText}</span>
+            `;
         }
 
         // 3. В обороте
@@ -206,7 +216,7 @@ class UIManager {
         });
     }
 
-    //Обновление статуса торгового алгоритма
+    // Обновление статуса торгового алгоритма
     updateBotStatus(status) {
         const statusWrapper = document.querySelector('.col-6 .card .mb-2');
         if (!statusWrapper) return;
@@ -236,12 +246,60 @@ class UIManager {
         }
     }
 }
-window.ui = new UIManager();
+const uiInstance = new UIManager();
+window.ui = uiInstance;
 
-window.toggleMenu = () => {
-    if (window.ui) window.ui.toggleMenu();
+window.toggleMenu = function(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    const menu = document.getElementById('glassMenu');
+    const icon = document.getElementById('menuIcon');
+
+    if (!menu || !icon) return;
+
+    // Проверяем реальное состояние по наличию класса active
+    const isNowActive = menu.classList.contains('active');
+
+    if (!isNowActive) {
+        // ОТКРЫВАЕМ
+        icon.classList.add('open');
+        menu.style.display = 'flex';
+        menu.offsetHeight; // force reflow
+        menu.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    } else {
+        // ЗАКРЫВАЕМ
+        window.closeGlobalMenu();
+    }
 };
 
-window.toggleAdminPanel = () => {
-    if (window.ui) window.ui.toggleAdminPanel();
+// Выносим закрытие в отдельную функцию для надежности
+window.closeGlobalMenu = function() {
+    const menu = document.getElementById('glassMenu');
+    const icon = document.getElementById('menuIcon');
+
+    if (icon) icon.classList.remove('open');
+    if (menu) {
+        menu.classList.remove('active');
+        setTimeout(() => {
+            if (!menu.classList.contains('active')) {
+                menu.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+        }, 300);
+    }
 };
+
+// Обработка клика по фону glass-menu
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('glassMenu');
+    const isMenuOpen = menu && menu.classList.contains('active');
+
+    // Если кликнули именно по подложке (glass-menu) или вне контента
+    if (isMenuOpen && (e.target.id === 'glassMenu' || e.target.classList.contains('glass-menu'))) {
+        window.closeGlobalMenu();
+    }
+});

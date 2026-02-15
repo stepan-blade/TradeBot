@@ -105,3 +105,20 @@
     color: #00ff88;
     transform: translateX(5px);
 }
+
+/* Гарантируем, что кнопка всегда выше всех слоев и доступна для клика */
+.navbar button[onclick*="toggleMenu"] {
+    position: relative;
+    z-index: 2000 !important;
+    pointer-events: auto !important;
+}
+
+/* Убираем возможные конфликты с прозрачным фоном меню */
+.glass-menu {
+    pointer-events: auto;
+}
+
+/* Фикс для иконки, чтобы она не игнорировала клики */
+.menu-icon, .menu-icon span {
+    pointer-events: none; /* Клик должен проходить на саму кнопку <button> */
+}

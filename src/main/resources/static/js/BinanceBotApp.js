@@ -28,6 +28,20 @@ class BinanceBotApp {
         setInterval(async () => {
             await this.updateDashboard();
         }, 2000);
+
+        // ── ИСПРАВЛЕНИЕ: правильный ID элемента (в HTML это chart-date-input) ──
+        const datePicker = document.getElementById('chart-date-input');
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        if (datePicker) {
+            datePicker.value = todayStr;
+            datePicker.addEventListener('change', e => {
+                this.chart.changeDate(e.target.value);
+            });
+        } else {
+            console.warn("Элемент <input id='chart-date-input'> не найден на странице");
+        }
+        // ───────────────────────────────────────────────────────────────────────
     }
 
     changeView(val) {
@@ -47,7 +61,6 @@ class BinanceBotApp {
         this.table.render(this.state.fullHistory);
     }
 
-    // Метод для кнопки "Применить" в календаре
     applyDateFilter() {
         this.state.currentPage = 1;
         this.table.render(this.state.fullHistory);
@@ -66,7 +79,6 @@ class BinanceBotApp {
         this.table.render(this.state.fullHistory);
     }
 
-    // ГЛАВНЫЙ МЕТОД UPDATE DASHBOARD
     async updateDashboard() {
         try {
             const [cooldowns, data] = await Promise.all([
@@ -86,10 +98,8 @@ class BinanceBotApp {
                 inTrade: Number(data.occupiedBalance || 0).toFixed(2),
                 todayProfit: Number(data.todayProfitUSDT || 0).toFixed(2),
                 todayPercent: Number(data.todayProfitPercent || 0).toFixed(2),
-                totalPnl: Number(data.unrealizedPnLUsdt || 0).toFixed(2), // грязный
-                totalPnlPercent: data.occupiedBalance > 0
-                    ? ((data.unrealizedPnLUsdt / data.occupiedBalance) * 100).toFixed(2)
-                    : 0,
+                totalPnl: Number(data.allProfitUsdt || 0).toFixed(2),
+                totalPnlPercent: Number(data.allProfitPercent || 0).toFixed(2),
                 calculatedPercent: Number(data.allProfitPercent || 0).toFixed(2)
             });
 
@@ -128,6 +138,7 @@ class BinanceBotApp {
 }
 
 window.app = new BinanceBotApp();
+window.app.init();
 
 window.toggleMenu = () => {
     if (window.app && window.app.ui) {

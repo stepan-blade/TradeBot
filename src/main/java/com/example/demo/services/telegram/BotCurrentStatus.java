@@ -24,7 +24,7 @@ public class BotCurrentStatus {
     private final TradeService tradeService;
     private final CalculatorService calculatorService;
     private final TradeRepository tradeRepository;
-    private  final BotSettingsRepository botSettingsRepository;
+    private final BotSettingsRepository botSettingsRepository;
 
     @Autowired
     public BotCurrentStatus(TelegramAPI telegramAPI, BinanceAPI binanceAPI, TradeService tradeService, TradeRepository tradeRepository, CalculatorService calculatorService, BotSettingsRepository botSettingsRepository) {
@@ -43,12 +43,21 @@ public class BotCurrentStatus {
 
         BotSettings botSettings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(new BotSettings());
 
+        double unrealizedUsdt = calculatorService.getUnrealizedPnLUsdt();
+        double todayUsdt = calculatorService.getTodayProfitUSDT();
+        double allUsdt = calculatorService.getRealizedProfit() + unrealizedUsdt;
+
+        double unrealizedPercent = calculatorService.getOccupiedBalance() > 0 ? (unrealizedUsdt / calculatorService.getOccupiedBalance()) * 100 : 0.0;
+        double todayPercent = calculatorService.getTodayProfitPercent();
+        double allPercent = calculatorService.getAllProfitPercent();
+
         StringBuilder sb = new StringBuilder();
         sb.append("📊 ТЕКУЩИЙ СТАТУС: " + botSettings.getStatus() + "\n");
         sb.append("💰 Баланс: ").append(String.format("%.6f", tradeService.getBalance())).append(" USDT\n");
         sb.append("🔄 В обороте: ").append(String.format("%.2f", calculatorService.getOccupiedBalance())).append(" USDT\n");
-        sb.append("📈 Текущий Pnl: ").append(calculatorService.getAllProfitPercent()).append("%\n");
-        sb.append("📊 Нереализ. PnL: ").append(String.format("%.2f", calculatorService.getUnrealizedPnLUsdt())).append(" USDT\n\n");
+        sb.append("📈 Общий PnL: ").append(String.format("%.2f", allUsdt)).append(" USDT (").append(String.format("%.2f", allPercent)).append("%)\n");
+        sb.append("📊 Нереализ. PnL: ").append(String.format("%.2f", unrealizedUsdt)).append(" USDT (").append(String.format("%.2f", unrealizedPercent)).append("%)\n");
+        sb.append("📊 Дневной PnL: ").append(String.format("%.2f", todayUsdt)).append(" USDT (").append(String.format("%.2f", todayPercent)).append("%)\n");
 
         if (openTrades.isEmpty()) {
             sb.append("🔎 Открытых сделок нет");
@@ -64,8 +73,7 @@ public class BotCurrentStatus {
                 sb.append("   📥 Вход: ").append(String.format("%.8f", trade.getEntryPrice())).append("\n");
                 sb.append("   🕒 Цена: ").append(String.format("%.8f", currentPrice)).append("\n");
                 sb.append("   🛡️ SL: ").append(String.format("%.8f", trade.getStopLoss())).append("\n");
-                sb.append("   ").append(pnlIcon).append(" PnL: ").append(String.format("%.2f", pnlPercent)).append("% (")
-                        .append(pnlUsdt >= 0 ? "+" : "").append(String.format("%.2f", pnlUsdt)).append(" USDT)\n\n");
+                sb.append("   ").append(pnlIcon).append(" PnL: ").append(pnlUsdt >= 0 ? "+" : "").append(String.format("%.2f", pnlUsdt)).append(" USDT (").append(String.format("%.2f", pnlPercent)).append("%)\n\n");
             }
         }
         telegramAPI.sendMessage(sb.toString());

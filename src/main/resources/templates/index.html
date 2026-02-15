@@ -60,7 +60,10 @@
       <div class="card p-3 p-md-4 h-100 d-flex flex-column">
         <div class="stat-label mb-1">Баланс</div>
         <div id="balance-val" class="balance-val text-truncate mb-1">0.00 $</div>
-        <div id="percent-change" class="fw-bold fs-6 mb-3 text-success">+0.00%</div>
+        <div id="percent-change" class="fw-bold fs-6 mb-3 text-success">
+          <span id="pnl-usdt">0.00 $</span>
+          <span id="pnl-percent">(0.00%)</span>
+        </div>
         <div id="total-pnl-container" class="mt-auto pt-3 border-top border-secondary border-opacity-25">
           <div class="stat-label mb-1">PnL активных сделок:</div>
           <div id="total-pnl-val" class="fw-bold fs-6 lh-1">0.00 $ (0.00%)</div>
@@ -86,14 +89,37 @@
   </div>
 
   <div class="card p-2 p-md-4 mb-4">
-    <div class="d-flex justify-content-between align-items-center p-2 mb-0">
+    <div class="d-flex justify-content-between align-items-center p-2 mb-2">
       <h5 class="mb-0 text-white">График доходности</h5>
-      <button class="btn btn-outline-secondary btn-sm" onclick="app.chart.resetZoom()">
-        <i class="bi bi-arrows-angle-contract"></i> Сброс зума
-      </button>
+      <div class="dropdown d-inline-block">
+            <span class="dropdown-toggle text-white small fw-medium" data-bs-toggle="dropdown" id="chart-date-toggle" style="cursor: pointer; letter-spacing: 0.5px;">
+                <span id="chart-selected-date">Сегодня</span>
+            </span>
+        <div class="dropdown-menu dropdown-menu-dark p-3" style="min-width: 260px;">
+          <div class="mb-3">
+            <label class="form-label small text-uppercase text-muted mb-1">Выберите дату</label>
+            <input type="date"
+                   id="chart-date-input"
+                   class="form-control form-control-sm bg-dark text-white border-secondary"
+                   onchange="app.chart.applyDate()">
+          </div>
+          <div class="row g-2">
+            <div class="col">
+              <button class="btn btn-outline-secondary btn-sm w-100" onclick="app.chart.resetDate()">Сегодня</button>
+            </div>
+            <div class="col">
+              <button class="btn btn-outline-secondary btn-sm w-100" onclick="app.chart.viewAllTime()">За всё время</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div style="height: 350px; position: relative;">
+    <div style="height: 360px; position: relative;">
       <canvas id="balanceChart"></canvas>
+      <!-- Улучшенный overlay для пустых дней -->
+      <div id="no-data-overlay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); color: #888; font-size: 1rem; text-align: center; display: none; pointer-events: none; z-index: 10; line-height: 1.4;">
+        <!-- Текст будет вставляться динамически в JS -->
+      </div>
     </div>
   </div>
 

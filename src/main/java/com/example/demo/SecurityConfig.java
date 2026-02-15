@@ -53,7 +53,7 @@ public class SecurityConfig {
     public UserDetailsService userDetailsService() {
         UserDetails user = User.withDefaultPasswordEncoder()
                 .username("admin")
-                .password("1")
+                .password("sherra15122001")
                 .roles("USER")
                 .build();
 

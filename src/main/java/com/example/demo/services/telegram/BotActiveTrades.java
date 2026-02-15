@@ -154,7 +154,7 @@ public class BotActiveTrades {
             case BotCommandsRepository.ACTION_EXECUTE:
                 if (!argument.isEmpty()) {
                     tradeService.closeSpecificTradeManually(argument);
-                    telegramAPI.sendMessage("Активная сделка были закрыта.");
+                    telegramAPI.sendMessage("Активная сделка была закрыта.");
                 }
                 break;
 

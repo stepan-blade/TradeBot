@@ -6,6 +6,7 @@ public interface BotCommandsRepository {
     String CMD_CLOSE_ALL = "/closeall";
     String CMD_CLEAR_HISTORY = "/clearhistory";
     String CMD_CHANGE_STATUS = "/chstatus";
+    String CMD_SETTINGS = "/settings";
 
     String ACTION_CONFIRM = "confirm_close";
     String ACTION_EXECUTE = "execute_close";

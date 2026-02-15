@@ -34,26 +34,39 @@ public class TradingStrategy {
     public void checkEntryConditions(String symbol, double currentPrice) {
         if (tradeService.isCoolDown(symbol)) return;
 
-        // Лимит открытых сделок
         BotSettings settings = botSettingsRepository.findById("MAIN_SETTINGS").orElse(new BotSettings());
-        int maxOpenTrades = settings.getMaxOpenTrades() != 0 ? settings.getMaxOpenTrades() : 3;
+        int maxOpenTrades = settings.getMaxOpenTrades() != 0 ? settings.getMaxOpenTrades() : 2;
         if (tradeService.getActiveTrades().size() >= maxOpenTrades) return;
 
-        List<double[]> klines = binanceAPI.getKlines(symbol, "5m", 250);
+        List<double[]> klines = binanceAPI.getKlines(symbol, "15m", 250);
 
         double rsi = indicatorService.calculateRSI(klines, 14);
-        double sma200 = indicatorService.calculateSMA(klines, 200);
-        double[] bb = indicatorService.calculateBollingerBands(klines, 20, 2.0);
+        double ema9 = indicatorService.calculateEMA(klines, 9);
+        double ema21 = indicatorService.calculateEMA(klines, 21);
+        double adx = indicatorService.calculateADX(klines, 14);
+        double vwap = indicatorService.calculateVWAP(klines, 20);
+        double[] volumes = klines.stream()
+                .filter(k -> k != null && k.length > 5)
+                .mapToDouble(k -> k[5])
+                .toArray();
 
-        // MACD для cross
-        double[] macd = indicatorService.calculateMACD(klines, 12, 26, 9);
-        double macdLine = macd[0];
-        double signalLine = macd[1];
+        double avgVolume = volumes.length >= 20
+                ? indicatorService.calculateSMA(volumes, 20)
+                : 0.0;
+        double currentVolume = klines.get(klines.size() - 1)[4];
 
-        double tradePercent = settings.getTradePercent();
+        double tradePercent = settings.getTradePercent() != 0 ? settings.getTradePercent() : 15.0;
 
-        // LONG: агрессивнее (RSI <45, price < mid BB, MACD cross up)
-        if (currentPrice > sma200 && rsi < 50 && currentPrice < bb[1] && macdLine > signalLine) {
+//        System.out.println(
+//                symbol + "\n" +
+//                "ema9: " + ema9 + " > ema21: " + ema21 + "?\n" +
+//                "adx: " + adx + " > 25\n" +
+//                "rsi: " + rsi + " < 55\n" +
+//                "currentVolume: " + currentVolume + " > avgVolume: " + avgVolume + "\n" +
+//                "currentPrice: " + currentPrice + " > vwap: " + vwap);
+
+        // LONG: EMA crossover, strong trend, not overbought, volume breakout, above VWAP
+        if (ema9 > ema21 && adx > 25 && rsi < 55 && currentVolume > avgVolume && currentPrice > vwap) {
             tradeService.openPosition(symbol, currentPrice, tradePercent, "LONG");
         }
     }
